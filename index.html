@@ -53,7 +53,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 .ticket .ticket-logo{display:block;width:54mm;max-width:54mm;height:auto;max-height:28mm;object-fit:contain;margin:0 auto 1.5mm}
 .ticket .ticket-business{text-align:center}
 .ticket .ticket-business-name{font-size:17px;font-weight:900;line-height:1.1}
-.ticket .ticket-title{font-size:15px;font-weight:900;text-align:center;margin:1.5mm 0}
+.ticket .ticket-title{font-size:15px;font-weight:400;text-align:center;margin:1.5mm 0}
 .ticket .ticket-order{font-size:14px;font-weight:900;text-align:center}
 .ticket .ticket-items-head,.ticket .ticket-item-row{display:grid;grid-template-columns:1fr 17mm 18mm;gap:1mm;align-items:start}
 .ticket .ticket-items-head{font-weight:800;border-bottom:1px solid #000;padding-bottom:1mm;margin-bottom:1mm}
@@ -908,7 +908,7 @@ function ticketHeaderHtml(){
 function renderConfigTicketPreview(){
  if(!$('configTicketPreview'))return;
  $('configTicketPreview').innerHTML=`${ticketHeaderHtml()}<hr>
- <div class="ticket-title">ORDEN DE PEDIDO</div>
+ <div class="ticket-title">COMPROBANTE DE VENTA</div>
  <div class="ticket-order">FIL-2026-100529</div>
  <div>Cliente: Cliente de ejemplo</div>
  <div>DNI: 00000000</div>
@@ -927,7 +927,7 @@ function buildTicket(o){
  const change=Math.max(0,Number(o.received||0)-Number(o.total||0));
  const pending=Math.max(0,Number(o.balance||0));
  $('ticket58').innerHTML=`${ticketHeaderHtml()}<hr>
- <div class="ticket-title">ORDEN DE PEDIDO</div>
+ <div class="ticket-title">${pending>0?'ORDEN DE PEDIDO':'COMPROBANTE DE VENTA'}</div>
  <div class="ticket-order">${o.code}</div>
  <div>Cliente: ${o.client||'Cliente general'}</div>
  <div>DNI: ${o.dni||'-'}</div>
