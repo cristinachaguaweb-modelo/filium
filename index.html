@@ -1006,6 +1006,11 @@ function normalizeOrder(o){
 async function persistOnly(){return}
 
 
+
+function openShalomTracking(){
+ window.open('https://www.shalom.com.pe/rastrea','_blank','noopener');
+}
+
 async function saveShippingData(id){
  if(!canEditShipping())return alert('Tu perfil no tiene permiso para editar datos de envío.');
  const o=db.orders.find(x=>x.id===id); if(!o)return;
@@ -1027,7 +1032,12 @@ async function saveShippingData(id){
   });
   if(error)throw error;
   await loadFromSupabase();
-  alert('Datos de envío actualizados.');
+  const updated=db.orders.find(x=>x.id===id);
+  if(updated?.tracking && updated?.pickupKey && updated?.status==='En tránsito'){
+   alert('Datos de envío actualizados. El pedido pasó automáticamente a En tránsito.');
+  }else{
+   alert('Datos de envío actualizados.');
+  }
  }catch(e){
   console.error(e);
   alert('No se pudieron guardar los datos de envío: '+(e.message||e));
@@ -1147,6 +1157,8 @@ function renderLogistics(){
       ${fulfillLabel(o)}
       ${isPickup?'':' · '+(o.carrier||'Sin operador')}
       ${o.destination?' · '+o.destination:''}
+      ${!isPickup&&o.tracking?`<br><b>Tracking:</b> ${o.tracking}`:''}
+      ${!isPickup&&o.pickupKey?` · <b>Clave:</b> ${o.pickupKey}`:''}
      </div>
     </div>
     <div class="log-summary-actions">
@@ -1215,6 +1227,7 @@ function renderLogistics(){
     <div class="actions" style="margin-top:10px">
      <button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button>
      <button class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button>
+     ${String(o.carrier||'').toLowerCase().includes('shalom')?`<button class="btn secondary" onclick="openShalomTracking()">Consultar en Shalom</button>`:''}
     </div>
    </div>`}
 
