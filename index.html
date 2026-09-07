@@ -44,7 +44,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 <body>
 <header>
  <div><h1>FILIUM · Lite</h1><div class="small">Inventario · Caja única · Preventa / Reserva · Pedidos · Motor logístico</div></div>
- <div><span class="badge info">CAJA 01</span> <button class="btn secondary" onclick="resetDemo()">Restablecer demo</button></div>
+ <div><span id="dbStatus" class="badge warn">Supabase: conectando…</span> <span class="badge info">CAJA 01</span></div>
 </header>
 
 <nav>
@@ -66,7 +66,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
  </div>
  <div class="panel" style="margin-top:14px">
   <h3>Operación FILIUM Lite</h3>
-  <div class="notice">La operación mantiene el flujo de INVERMAR, pero solo con los módulos esenciales.</div>
+  <div class="notice">La operación mantiene el flujo de INVERMAR, pero solo con los módulos esenciales. <b>Datos sincronizados con Supabase.</b></div>
  </div>
 </section>
 
@@ -86,6 +86,29 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   <div class="actions" style="margin-top:12px"><button class="btn" onclick="saveProduct()">Guardar</button><button class="btn secondary" onclick="toggleProductForm()">Cancelar</button></div>
  </div>
  <div class="panel tablewrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Lista</th><th>Negociable</th><th>Mínimo</th><th>Costo</th><th>Stock físico</th><th>Disponible</th><th>Exhibición</th><th>Reservados</th><th>Preventa</th><th>Tránsito</th><th></th></tr></thead><tbody id="inventoryRows"></tbody></table></div>
+
+ <div class="panel">
+  <div class="toolbar">
+   <div><h3>Historial de movimientos</h3><div class="small">Entradas, salidas, reservas, preventas y ajustes de inventario.</div></div>
+   <div class="actions">
+    <input id="movSearch" placeholder="Buscar SKU, producto o referencia" style="width:260px" oninput="renderMovements()">
+    <select id="movTypeFilter" style="width:180px" onchange="renderMovements()">
+      <option value="">Todos los movimientos</option>
+      <option value="entrada">Entrada</option>
+      <option value="salida">Salida</option>
+      <option value="reserva">Reserva</option>
+      <option value="preventa">Preventa</option>
+      <option value="ajuste">Ajuste</option>
+    </select>
+   </div>
+  </div>
+  <div class="tablewrap" style="margin-top:10px">
+   <table>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Producto</th><th>Cantidad</th><th>Stock antes</th><th>Stock después</th><th>Referencia</th><th>Detalle</th></tr></thead>
+    <tbody id="movementRows"></tbody>
+   </table>
+  </div>
+ </div>
 </section>
 
 <section id="caja" class="hidden">
@@ -162,29 +185,133 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 </section>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL="https://dicvdjdoxvsvgokezzia.supabase.co";
+const SUPABASE_KEY="sb_publishable_xvns4feM-ur9AsnrIGrqVw_rgjFrSyk";
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const LS='filium_lite_v2';
-let db=JSON.parse(localStorage.getItem(LS)||'null')||{
- products:[
-  {id:1,sku:'FIL-001',name:'Producto Demo A',cat:'General',list:100,neg:95,min:90,cost:60,stock:10,display:1,reserved:0,preorder:0,transit:0},
-  {id:2,sku:'FIL-002',name:'Producto Demo B',cat:'General',list:180,neg:170,min:160,cost:110,stock:6,display:1,reserved:0,preorder:0,transit:0},
-  {id:3,sku:'FIL-003',name:'Accesorio Demo',cat:'Accesorios',list:35,neg:30,min:28,cost:18,stock:20,display:2,reserved:0,preorder:0,transit:0}
- ],orders:[],preorders:[],seq:1
-};
+let db={products:[],orders:[],preorders:[],movements:[],seq:1};
 let cart=[],editingId=null;
 const $=id=>document.getElementById(id);
-function save(){localStorage.setItem(LS,JSON.stringify(db));renderAll()}
+
+function setDbStatus(ok,msg){
+ const el=$('dbStatus'); if(!el)return;
+ el.className='badge '+(ok?'ok':'err');
+ el.textContent='Supabase: '+msg;
+}
+function productFromRow(r){
+ return {id:r.id,sku:r.sku,name:r.name,cat:r.category||'',list:Number(r.price_list||0),neg:Number(r.price_negotiable||0),min:Number(r.price_min||0),cost:Number(r.cost||0),stock:Number(r.stock||0),display:Number(r.display_stock||0),reserved:Number(r.reserved_stock||0),preorder:Number(r.preorder_stock||0),transit:Number(r.transit_stock||0)}
+}
+function productToRow(p){
+ return {sku:p.sku,name:p.name,category:p.cat,price_list:p.list,price_negotiable:p.neg,price_min:p.min,cost:p.cost,stock:p.stock,display_stock:p.display,reserved_stock:p.reserved,preorder_stock:p.preorder,transit_stock:p.transit,updated_at:new Date().toISOString()}
+}
+function orderFromRow(r,items=[]){
+ return {id:r.id,code:r.order_code,date:r.created_at,client:r.customer_name||'',dni:r.dni_ruc||'',phone:r.phone||'',items,total:Number(r.total||0),received:Number(r.received||0),balance:Number(r.balance||0),payment:r.payment_method||'',operation:r.payment_operation||'',fulfill:r.fulfillment_type||'recojo_tienda',destination:r.destination||'',address:r.address||'',carrier:r.carrier||'',status:r.logistic_status||'Por alistar',prepReady:!!r.prep_ready,packageType:r.package_type||'Caja',packages:Number(r.packages||1),weight:r.weight||'',dimensions:r.dimensions||'',tracking:r.tracking||'',pickupKey:r.pickup_key||'',shippingCost:Number(r.shipping_cost||0),shippingPaymentStatus:r.shipping_payment_status||'Pendiente',shippingPaidBy:r.shipping_paid_by||'Cliente',shippingPaymentMethod:r.shipping_payment_method||'',deliveredAt:r.delivered_at||''}
+}
+function orderToPatch(o){
+ return {customer_name:o.client,dni_ruc:o.dni,phone:o.phone,total:o.total,received:o.received,balance:o.balance,payment_method:o.payment,payment_operation:o.operation,fulfillment_type:o.fulfill,destination:o.destination,address:o.address,carrier:o.carrier,logistic_status:o.status,prep_ready:o.prepReady,package_type:o.packageType,packages:o.packages,weight:o.weight,dimensions:o.dimensions,tracking:o.tracking,pickup_key:o.pickupKey,shipping_cost:o.shippingCost,shipping_payment_status:o.shippingPaymentStatus,shipping_paid_by:o.shippingPaidBy,shipping_payment_method:o.shippingPaymentMethod,delivered_at:o.deliveredAt||null,updated_at:new Date().toISOString()}
+}
+async function loadFromSupabase(){
+ try{
+  setDbStatus(false,'conectando…');
+  const [pr,or,ir,rr,mr]=await Promise.all([
+   supabaseClient.from('products').select('*').order('id'),
+   supabaseClient.from('orders').select('*').order('created_at'),
+   supabaseClient.from('order_items').select('*').order('id'),
+   supabaseClient.from('preorders_reservations').select('*').order('created_at'),
+   supabaseClient.from('inventory_movements').select('*').order('created_at',{ascending:false}).limit(500)
+  ]);
+  for(const r of [pr,or,ir,rr,mr]) if(r.error) throw r.error;
+  db.products=(pr.data||[]).map(productFromRow);
+  const itemsByOrder={};
+  for(const i of (ir.data||[])){
+   (itemsByOrder[i.order_id]??=[]).push({id:i.product_id,sku:i.sku,name:i.product_name,qty:Number(i.quantity||1),price:Number(i.unit_price||0)})
+  }
+  db.orders=(or.data||[]).map(r=>orderFromRow(r,itemsByOrder[r.id]||[]));
+  db.preorders=(rr.data||[]).map(r=>({id:r.id,type:r.type,client:r.customer_name||'',phone:r.phone||'',productId:r.product_id,product:r.product_name||'',qty:Number(r.quantity||1),advance:Number(r.advance||0),status:r.status||'Activo',date:r.created_at}));
+  db.movements=(mr.data||[]);
+  const years=db.orders.map(o=>parseInt((o.code||'').split('-').pop())).filter(Number.isFinite);
+  db.seq=(years.length?Math.max(...years):0)+1;
+  setDbStatus(true,'conectado');
+  renderAll();
+ }catch(e){
+  console.error(e);setDbStatus(false,'ERROR');alert('No se pudo conectar a Supabase: '+(e.message||e));
+ }
+}
+async function save(){renderAll()}
+
 function money(v){return 'S/ '+Number(v||0).toFixed(2)}
 function available(p){return Math.max(0,p.stock-p.display-p.reserved)}
 function orderCode(){return 'FIL-'+new Date().getFullYear()+'-'+String(db.seq++).padStart(6,'0')}
 function toggleProductForm(){ $('productForm').classList.toggle('hidden') }
-function saveProduct(){
+async function saveProduct(){
  let sku=$('pSku').value.trim(),name=$('pName').value.trim(); if(!sku||!name)return alert('Completa SKU y nombre.');
- let p={id:editingId||Date.now(),sku,name,cat:$('pCat').value||'General',list:+$('pList').value||0,neg:+$('pNeg').value||0,min:+$('pMin').value||0,cost:+$('pCost').value||0,stock:+$('pStock').value||0,display:+$('pDisplay').value||0,reserved:0,preorder:0,transit:0};
- let i=db.products.findIndex(x=>x.id===editingId); if(i>=0){p.reserved=db.products[i].reserved;p.preorder=db.products[i].preorder;p.transit=db.products[i].transit;db.products[i]=p}else db.products.push(p);
- editingId=null;['pSku','pName','pCat','pList','pNeg','pMin','pCost','pStock','pDisplay'].forEach(x=>$(x).value='');$('productForm').classList.add('hidden');save();
+ let p={id:editingId||null,sku,name,cat:$('pCat').value||'General',list:+$('pList').value||0,neg:+$('pNeg').value||0,min:+$('pMin').value||0,cost:+$('pCost').value||0,stock:+$('pStock').value||0,display:+$('pDisplay').value||0,reserved:0,preorder:0,transit:0};
+ try{
+   if(editingId){
+     const old=db.products.find(x=>x.id===editingId);p.reserved=old.reserved;p.preorder=old.preorder;p.transit=old.transit;
+     const before=Number(old.stock||0), after=Number(p.stock||0);
+     const {error}=await supabaseClient.from('products').update(productToRow(p)).eq('id',editingId); if(error)throw error;
+     if(before!==after){
+       await recordMovement({product:{...p,id:editingId},type:'ajuste',qty:after-before,before,after,reference:'Edición inventario',detail:'Ajuste manual de stock físico'});
+     }
+   }else{
+     const {data,error}=await supabaseClient.from('products').insert(productToRow(p)).select(); if(error)throw error;
+     const created=data?.[0];
+     if(created && Number(p.stock)>0){
+       await recordMovement({product:{...p,id:created.id},type:'entrada',qty:p.stock,before:0,after:p.stock,reference:'Alta de producto',detail:'Stock inicial'});
+     }
+   }
+   editingId=null;['pSku','pName','pCat','pList','pNeg','pMin','pCost','pStock','pDisplay'].forEach(x=>$(x).value='');$('productForm').classList.add('hidden');
+   await loadFromSupabase();
+ }catch(e){alert('Error guardando producto: '+e.message)}
 }
 function editProduct(id){let p=db.products.find(x=>x.id===id);editingId=id;Object.entries({pSku:p.sku,pName:p.name,pCat:p.cat,pList:p.list,pNeg:p.neg,pMin:p.min,pCost:p.cost,pStock:p.stock,pDisplay:p.display}).forEach(([k,v])=>$(k).value=v);$('productForm').classList.remove('hidden')}
+
+async function recordMovement({product,type,qty,before,after,reference='',detail=''}){
+ try{
+  const row={
+   product_id:product?.id||null,
+   sku:product?.sku||'',
+   product_name:product?.name||'',
+   movement_type:type,
+   quantity:Number(qty||0),
+   stock_before:Number(before||0),
+   stock_after:Number(after||0),
+   reference:reference||'',
+   detail:detail||''
+  };
+  const {error}=await supabaseClient.from('inventory_movements').insert(row);
+  if(error) throw error;
+ }catch(e){
+  console.error('No se pudo registrar movimiento:',e);
+ }
+}
+function movementBadge(t){
+ const cls=t==='entrada'?'ok':t==='salida'?'err':t==='reserva'?'warn':t==='preventa'?'info':'badge';
+ return `<span class="badge ${cls}">${t}</span>`;
+}
+function renderMovements(){
+ const q=(($('movSearch')?.value)||'').toLowerCase();
+ const t=$('movTypeFilter')?.value||'';
+ const rows=(db.movements||[]).filter(m=>
+   (!t||m.movement_type===t) &&
+   ((m.sku||'')+' '+(m.product_name||'')+' '+(m.reference||'')+' '+(m.detail||'')).toLowerCase().includes(q)
+ );
+ $('movementRows').innerHTML=rows.length?rows.map(m=>`<tr>
+  <td>${new Date(m.created_at).toLocaleString('es-PE')}</td>
+  <td>${movementBadge(m.movement_type)}</td>
+  <td>${m.sku||'-'}</td>
+  <td>${m.product_name||'-'}</td>
+  <td>${Number(m.quantity||0)}</td>
+  <td>${Number(m.stock_before||0)}</td>
+  <td>${Number(m.stock_after||0)}</td>
+  <td>${m.reference||'-'}</td>
+  <td>${m.detail||'-'}</td>
+ </tr>`).join(''):'<tr><td colspan="9" class="small">No hay movimientos registrados.</td></tr>';
+}
+
 function renderInventory(){let q=($('stockSearch').value||'').toLowerCase();$('inventoryRows').innerHTML=db.products.filter(p=>(p.sku+' '+p.name).toLowerCase().includes(q)).map(p=>`<tr><td>${p.sku}</td><td><b>${p.name}</b><div class="small">${p.cat}</div></td><td>${money(p.list)}</td><td>${money(p.neg)}</td><td>${money(p.min)}</td><td>${money(p.cost)}</td><td>${p.stock}</td><td><b>${available(p)}</b></td><td>${p.display}</td><td>${p.reserved}</td><td>${p.preorder}</td><td>${p.transit}</td><td><button class="btn secondary" onclick="editProduct(${p.id})">Editar</button></td></tr>`).join('')}
 function renderProductSearch(){let q=($('sSearch').value||'').toLowerCase();let rows=db.products.filter(p=>available(p)>0&&(p.sku+' '+p.name).toLowerCase().includes(q)).slice(0,8);$('sSearchResults').innerHTML=rows.length?rows.map(p=>`<button class="btn secondary" style="margin:4px" onclick="addCart(${p.id})">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</button>`).join(''):'Sin coincidencias.'}
 function addCart(id){let p=db.products.find(x=>x.id===id),c=cart.find(x=>x.id===id);if(c){if(c.qty<available(p))c.qty++}else cart.push({id:p.id,sku:p.sku,name:p.name,price:p.list,qty:1});renderCart()}
@@ -195,20 +322,50 @@ function removeCart(id){cart=cart.filter(x=>x.id!==id);renderCart()}
 function calcPay(){let total=cart.reduce((a,c)=>a+c.price*c.qty,0),rec=+$('sReceived').value||0;$('sBalance').value=money(Math.max(0,total-rec));$('sChange').value=money(Math.max(0,rec-total))}
 $('sReceived').addEventListener('input',calcPay);
 function syncDeliveryFields(){let v=$('sFulfill').value,show=v!=='recojo_tienda';$('deliveryDistrictWrap').classList.toggle('hidden',!show);$('deliveryAddressWrap').classList.toggle('hidden',!show);$('carrierWrap').classList.toggle('hidden',!show)}
-function createSale(){
+async function createSale(){
  if(!cart.length)return alert('Agrega productos.');
  let total=cart.reduce((a,c)=>a+c.price*c.qty,0),received=+$('sReceived').value||0;
  for(let c of cart){let p=db.products.find(x=>x.id===c.id); if(c.qty>available(p))return alert('Stock insuficiente para '+p.name)}
- let o={id:Date.now(),code:orderCode(),date:new Date().toISOString(),client:$('sClient').value||'Cliente general',dni:$('sDni').value,phone:$('sPhone').value,items:cart.map(x=>({...x})),total,received,balance:Math.max(0,total-received),payment:$('sMethod').value,operation:$('sOperation').value,fulfill:$('sFulfill').value,destination:$('sDestination').value,address:$('sAddress').value,carrier:$('sCarrier').value,status:'Por alistar',prepReady:false,packageType:'Caja',packages:1,weight:'',dimensions:'',tracking:'',pickupKey:'',shippingCost:0,shippingPaymentStatus:'Pendiente',shippingPaidBy:'Cliente',shippingPaymentMethod:'',deliveredAt:''};
- for(let c of cart){db.products.find(x=>x.id===c.id).stock-=c.qty}
- db.orders.push(o);buildTicket(o);cart=[];['sClient','sDni','sPhone','sSearch','sReceived','sOperation','sDestination','sAddress'].forEach(x=>$(x).value='');$('sReceived').value=0;save();alert('Pedido generado: '+o.code)
+ const code=orderCode();
+ const base={order_code:code,customer_name:$('sClient').value||'Cliente general',dni_ruc:$('sDni').value,phone:$('sPhone').value,total,received,balance:Math.max(0,total-received),payment_method:$('sMethod').value,payment_operation:$('sOperation').value,fulfillment_type:$('sFulfill').value,destination:$('sDestination').value,address:$('sAddress').value,carrier:$('sCarrier').value,logistic_status:'Por alistar',prep_ready:false,package_type:'Caja',packages:1,shipping_cost:0,shipping_payment_status:'Pendiente',shipping_paid_by:'Cliente'};
+ try{
+   const {data:orderRows,error:oe}=await supabaseClient.from('orders').insert(base).select(); if(oe)throw oe;
+   const order=orderRows[0];
+   const itemRows=cart.map(c=>({order_id:order.id,product_id:c.id,sku:c.sku,product_name:c.name,quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty}));
+   const {error:ie}=await supabaseClient.from('order_items').insert(itemRows); if(ie)throw ie;
+   for(const c of cart){
+     const p=db.products.find(x=>x.id===c.id);
+     const before=Number(p.stock||0), after=before-c.qty;
+     const {error:pe}=await supabaseClient.from('products').update({stock:after,updated_at:new Date().toISOString()}).eq('id',p.id);
+     if(pe)throw pe;
+     await recordMovement({product:p,type:'salida',qty:-c.qty,before,after,reference:code,detail:'Venta registrada en Caja 01'});
+   }
+   const local=orderFromRow(order,cart.map(x=>({...x}))); buildTicket(local);
+   cart=[];['sClient','sDni','sPhone','sSearch','sReceived','sOperation','sDestination','sAddress'].forEach(x=>$(x).value='');$('sReceived').value=0;
+   await loadFromSupabase(); alert('Pedido generado: '+code);
+ }catch(e){console.error(e);alert('Error creando pedido: '+e.message)}
 }
 function buildTicket(o){$('ticket58').innerHTML=`<div class="logo">FILIUM</div><div style="text-align:center">TICKET DE VENTA</div><hr><div><b>${o.code}</b></div><div>${new Date(o.date).toLocaleString('es-PE')}</div><div>Cliente: ${o.client}</div><hr>${o.items.map(i=>`<div><b>${i.name}</b><br>${i.qty} × ${money(i.price)} = ${money(i.qty*i.price)}</div>`).join('')}<hr><div><b>TOTAL: ${money(o.total)}</b></div><div>Pago: ${o.payment}</div>${o.balance>0?`<div><b>Saldo pendiente: ${money(o.balance)}</b></div>`:''}<hr><div style="text-align:center">Gracias por su compra</div>`}
-function createPreorder(){
+async function createPreorder(){
  let type=$('prType').value,p=db.products.find(x=>x.id==$('prProduct').value),qty=+$('prQty').value||1;if(!p)return;
  if(type==='reserva'&&qty>available(p))return alert('No hay stock disponible suficiente para reservar.');
- let r={id:Date.now(),type,client:$('prClient').value||'Cliente',phone:$('prPhone').value,productId:p.id,product:p.name,qty,advance:+$('prAdvance').value||0,status:'Activo',date:new Date().toISOString()};
- if(type==='reserva')p.reserved+=qty;else p.preorder+=qty;db.preorders.push(r);save()
+ try{
+   const row={type,customer_name:$('prClient').value||'Cliente',phone:$('prPhone').value,product_id:p.id,product_name:p.name,quantity:qty,advance:+$('prAdvance').value||0,status:'Activo'};
+   const {error}=await supabaseClient.from('preorders_reservations').insert(row);if(error)throw error;
+   const patch=type==='reserva'?{reserved_stock:p.reserved+qty}:{preorder_stock:p.preorder+qty};
+   patch.updated_at=new Date().toISOString();
+   const {error:pe}=await supabaseClient.from('products').update(patch).eq('id',p.id);if(pe)throw pe;
+   await recordMovement({
+     product:p,
+     type:type,
+     qty:qty,
+     before:p.stock,
+     after:p.stock,
+     reference:type==='reserva'?'Reserva':'Preventa',
+     detail:(type==='reserva'?'Stock separado para ':'Preventa registrada para ')+($('prClient').value||'Cliente')
+   });
+   await loadFromSupabase();
+ }catch(e){alert('Error registrando '+type+': '+e.message)}
 }
 function renderPreorders(){$('preRows').innerHTML=db.preorders.map(r=>`<tr><td><span class="badge ${r.type==='reserva'?'ok':'warn'}">${r.type}</span></td><td>${r.client}<div class="small">${r.phone||''}</div></td><td>${r.product}</td><td>${r.qty}</td><td>${money(r.advance)}</td><td>${r.status}</td><td>${new Date(r.date).toLocaleDateString('es-PE')}</td></tr>`).join('')}
 function fulfillLabel(o){return o.fulfill==='recojo_tienda'?'Recojo en tienda':o.fulfill==='delivery_lima'?'Delivery Lima':'Provincia'}
@@ -227,34 +384,36 @@ function normalizeOrder(o){
  if(o.deliveredAt===undefined)o.deliveredAt='';
  return o;
 }
-function persistOnly(){localStorage.setItem(LS,JSON.stringify(db))}
-function updateOrderField(id,k,v){
+async function persistOnly(){return}
+async function updateOrderField(id,k,v){
  let o=db.orders.find(x=>x.id===id); if(!o)return;
  if(['shippingCost','packages'].includes(k)) v=Number(v||0);
  if(k==='prepReady') v=(v===true||v==='true');
- o[k]=v; persistOnly(); renderOrders(); renderLogistics();
+ o[k]=v;
+ try{
+  const {error}=await supabaseClient.from('orders').update(orderToPatch(o)).eq('id',id);if(error)throw error;
+  await loadFromSupabase();
+ }catch(e){alert('Error actualizando pedido: '+e.message)}
 }
-function processShippingPayment(id){
+async function processShippingPayment(id){
  let o=db.orders.find(x=>x.id===id); if(!o)return;
  if(Number(o.shippingCost||0)<=0){alert('Ingresa el costo de envío antes de procesar el pago.');return}
- o.shippingPaymentStatus='Pagado'; persistOnly(); renderLogistics();
+ o.shippingPaymentStatus='Pagado';
+ try{const {error}=await supabaseClient.from('orders').update(orderToPatch(o)).eq('id',id);if(error)throw error;await loadFromSupabase()}catch(e){alert('Error: '+e.message)}
 }
-function setLogStatus(id,status){
+async function setLogStatus(id,status){
  let o=db.orders.find(x=>x.id===id); if(!o)return;
  if(status==='En tránsito' && o.fulfill!=='recojo_tienda' && !o.prepReady){alert('Primero marca la preparación como LISTA.');return}
- if(status==='Entregado' && o.balance>0){alert('El pedido tiene saldo pendiente. Cóbrralo antes de marcarlo como entregado.');return}
- o.status=status;
- if(status==='Entregado')o.deliveredAt=new Date().toISOString();
- persistOnly(); renderOrders(); renderLogistics();
+ if(status==='Entregado' && o.balance>0){alert('El pedido tiene saldo pendiente. Cóbralo antes de marcarlo como entregado.');return}
+ o.status=status;if(status==='Entregado')o.deliveredAt=new Date().toISOString();
+ try{const {error}=await supabaseClient.from('orders').update(orderToPatch(o)).eq('id',id);if(error)throw error;await loadFromSupabase()}catch(e){alert('Error: '+e.message)}
 }
-function collectBalance(id){
- let o=db.orders.find(x=>x.id===id); if(!o)return;
- if(o.balance<=0)return;
- let amount=prompt('Saldo pendiente '+money(o.balance)+'. Ingresa el importe cobrado:',o.balance);
- if(amount===null)return;
- let n=Number(amount); if(!n||n<=0)return alert('Importe inválido.');
- let paid=Math.min(n,o.balance); o.received+=paid; o.balance=Math.max(0,o.total-o.received);
- persistOnly(); buildTicket(o); renderOrders(); renderLogistics();
+async function collectBalance(id){
+ let o=db.orders.find(x=>x.id===id); if(!o||o.balance<=0)return;
+ let amount=prompt('Saldo pendiente '+money(o.balance)+'. Ingresa el importe cobrado:',o.balance);if(amount===null)return;
+ let n=Number(amount);if(!n||n<=0)return alert('Importe inválido.');
+ let paid=Math.min(n,o.balance);o.received+=paid;o.balance=Math.max(0,o.total-o.received);
+ try{const {error}=await supabaseClient.from('orders').update({received:o.received,balance:o.balance,updated_at:new Date().toISOString()}).eq('id',id);if(error)throw error;buildTicket(o);await loadFromSupabase()}catch(e){alert('Error cobrando saldo: '+e.message)}
 }
 function renderLogistics(){
  let f=$('logFilter').value,t=$('logType').value,q=($('logSearch').value||'').toLowerCase();
@@ -329,10 +488,10 @@ function loadShipLabel(id){
 }
 function printTicket(){document.body.classList.add('print-ticket');window.print();setTimeout(()=>document.body.classList.remove('print-ticket'),300)}
 function printLabel(){document.body.classList.add('print-label');window.print();setTimeout(()=>document.body.classList.remove('print-label'),300)}
-function resetDemo(){if(confirm('¿Restablecer datos demo de FILIUM Lite?')){localStorage.removeItem(LS);location.reload()}}
-function renderAll(){renderInventory();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
+function resetDemo(){location.reload()}}
+function renderAll(){renderInventory();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
-db.orders=db.orders.map(normalizeOrder);persistOnly();syncDeliveryFields();renderAll();
+syncDeliveryFields();renderCart();loadFromSupabase();
 </script>
 </body>
 </html>
