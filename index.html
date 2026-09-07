@@ -332,6 +332,7 @@ const ROLE_LABELS={tienda:'Tienda',supervisor:'Supervisor',administrador:'Admini
 function canManageInventory(){return currentProfile && ['supervisor','administrador'].includes(currentProfile.role)}
 function canReceiveInventory(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
 function canGenerateSales(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
+function canEditShipping(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
 function actorName(){return currentProfile?.full_name || currentUser?.email || 'Usuario'}
 function actorRole(){return currentProfile?.role || 'sin_perfil'}
 const $=id=>document.getElementById(id);
@@ -373,6 +374,7 @@ function applyPermissions(){
  $('newProductBtn').classList.toggle('hidden',!manage);
  if(!manage)$('productForm').classList.add('hidden');
  if($('receiptPanel'))$('receiptPanel').classList.toggle('hidden',!canReceiveInventory());
+ if($('cfgBusinessName'))applyPrintSettingsPermissions();
  renderInventory();
  renderReceiptProducts();
 }
@@ -382,6 +384,7 @@ async function startSession(user){
   currentProfile=await loadProfile(user);
   $('authScreen').classList.add('hidden');
   applyPermissions();
+  await loadPrintSettings();
   await loadFromSupabase();
  }catch(e){
   await supabaseClient.auth.signOut();
@@ -691,7 +694,7 @@ async function createSale(){
  }
 }
 
-const PRINT_SETTINGS_KEY='filium_print_settings_v1';
+
 let printSettings={
  businessName:'FILIUM',
  businessPhone:'',
@@ -699,46 +702,147 @@ let printSettings={
  businessAddress:'',
  logoData:''
 };
-function loadPrintSettings(){
- try{
-  const saved=JSON.parse(localStorage.getItem(PRINT_SETTINGS_KEY)||'null');
-  if(saved)printSettings={...printSettings,...saved};
- }catch(e){console.error(e)}
- if($('cfgBusinessName'))$('cfgBusinessName').value=printSettings.businessName||'FILIUM';
- if($('cfgBusinessPhone'))$('cfgBusinessPhone').value=printSettings.businessPhone||'';
- if($('cfgBusinessRuc'))$('cfgBusinessRuc').value=printSettings.businessRuc||'';
- if($('cfgBusinessAddress'))$('cfgBusinessAddress').value=printSettings.businessAddress||'';
- if($('cfgLogoPreview')){
-  $('cfgLogoPreview').style.display=printSettings.logoData?'block':'none';
-  if(printSettings.logoData)$('cfgLogoPreview').src=printSettings.logoData;
- }
- renderConfigTicketPreview();
+
+function canEditPrintSettings(){
+ return currentProfile && ['supervisor','administrador'].includes(currentProfile.role);
 }
+
+async function loadPrintSettings(){
+ try{
+  const {data,error}=await supabaseClient
+   .from('company_settings')
+   .select('*')
+   .eq('id',1)
+   .maybeSingle();
+
+  if(error)throw error;
+
+  if(data){
+   printSettings={
+    businessName:data.business_name||'FILIUM',
+    businessPhone:data.business_phone||'',
+    businessRuc:data.business_ruc||'',
+    businessAddress:data.business_address||'',
+    logoData:data.logo_data||''
+   };
+  }
+
+  if($('cfgBusinessName'))$('cfgBusinessName').value=printSettings.businessName||'FILIUM';
+  if($('cfgBusinessPhone'))$('cfgBusinessPhone').value=printSettings.businessPhone||'';
+  if($('cfgBusinessRuc'))$('cfgBusinessRuc').value=printSettings.businessRuc||'';
+  if($('cfgBusinessAddress'))$('cfgBusinessAddress').value=printSettings.businessAddress||'';
+
+  if($('cfgLogoPreview')){
+   $('cfgLogoPreview').style.display=printSettings.logoData?'block':'none';
+   if(printSettings.logoData)$('cfgLogoPreview').src=printSettings.logoData;
+  }
+
+  applyPrintSettingsPermissions();
+  renderConfigTicketPreview();
+ }catch(e){
+  console.error('Error cargando configuración de impresión:',e);
+  if($('cfgSavedMsg'))$('cfgSavedMsg').textContent='No se pudo cargar la configuración desde Supabase.';
+ }
+}
+
+function applyPrintSettingsPermissions(){
+ const editable=canEditPrintSettings();
+ ['cfgBusinessName','cfgBusinessPhone','cfgBusinessRuc','cfgBusinessAddress','cfgLogoFile']
+ .forEach(id=>{if($(id))$(id).disabled=!editable});
+
+ const buttons=document.querySelectorAll('#configuracion .actions button');
+ buttons.forEach(b=>b.disabled=!editable);
+
+ if($('cfgSavedMsg') && !editable){
+  $('cfgSavedMsg').textContent='Modo lectura: solo Supervisor o Administrador puede modificar la configuración.';
+ }
+}
+
 function previewConfigLogo(input){
- const file=input.files?.[0]; if(!file)return;
+ if(!canEditPrintSettings())return alert('Solo Supervisor o Administrador puede cambiar el logo.');
+ const file=input.files?.[0];
+ if(!file)return;
+
+ if(file.size>900000){
+  alert('El logo es demasiado grande. Usa una imagen menor a 900 KB.');
+  input.value='';
+  return;
+ }
+
  const reader=new FileReader();
- reader.onload=()=>{printSettings.logoData=reader.result;$('cfgLogoPreview').src=reader.result;$('cfgLogoPreview').style.display='block';renderConfigTicketPreview()};
+ reader.onload=()=>{
+  printSettings.logoData=reader.result;
+  $('cfgLogoPreview').src=reader.result;
+  $('cfgLogoPreview').style.display='block';
+  renderConfigTicketPreview();
+ };
  reader.readAsDataURL(file);
 }
-function savePrintSettings(){
+
+async function savePrintSettings(){
+ if(!canEditPrintSettings())return alert('Solo Supervisor o Administrador puede modificar la configuración.');
+
  printSettings.businessName=$('cfgBusinessName').value.trim()||'FILIUM';
  printSettings.businessPhone=$('cfgBusinessPhone').value.trim();
  printSettings.businessRuc=$('cfgBusinessRuc').value.trim();
  printSettings.businessAddress=$('cfgBusinessAddress').value.trim();
- localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(printSettings));
- $('cfgSavedMsg').textContent='Configuración guardada correctamente.';
- renderConfigTicketPreview();
- if(db.orders.length)buildTicket(db.orders[db.orders.length-1]);
- setTimeout(()=>{$('cfgSavedMsg').textContent=''},2500);
+
+ try{
+  const row={
+   id:1,
+   business_name:printSettings.businessName,
+   business_phone:printSettings.businessPhone,
+   business_ruc:printSettings.businessRuc,
+   business_address:printSettings.businessAddress,
+   logo_data:printSettings.logoData||'',
+   updated_by:currentUser?.id||null,
+   updated_at:new Date().toISOString()
+  };
+
+  const {error}=await supabaseClient
+   .from('company_settings')
+   .upsert(row,{onConflict:'id'});
+
+  if(error)throw error;
+
+  $('cfgSavedMsg').textContent='Configuración guardada en Supabase.';
+  renderConfigTicketPreview();
+  if(db.orders.length)buildTicket(db.orders[db.orders.length-1]);
+  setTimeout(()=>{
+   if($('cfgSavedMsg'))$('cfgSavedMsg').textContent='';
+  },2500);
+ }catch(e){
+  console.error(e);
+  alert('Error guardando configuración: '+(e.message||e));
+ }
 }
-function clearPrintLogo(){
+
+async function clearPrintLogo(){
+ if(!canEditPrintSettings())return alert('Solo Supervisor o Administrador puede modificar la configuración.');
+
  printSettings.logoData='';
- localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(printSettings));
- $('cfgLogoPreview').removeAttribute('src');
- $('cfgLogoPreview').style.display='none';
- $('cfgLogoFile').value='';
- renderConfigTicketPreview();
+
+ try{
+  const {error}=await supabaseClient
+   .from('company_settings')
+   .update({
+    logo_data:'',
+    updated_by:currentUser?.id||null,
+    updated_at:new Date().toISOString()
+   })
+   .eq('id',1);
+
+  if(error)throw error;
+
+  $('cfgLogoPreview').removeAttribute('src');
+  $('cfgLogoPreview').style.display='none';
+  $('cfgLogoFile').value='';
+  renderConfigTicketPreview();
+ }catch(e){
+  alert('Error quitando logo: '+(e.message||e));
+ }
 }
+
 function ticketHeaderHtml(){
  return `<div class="ticket-business">
   ${printSettings.logoData?`<img class="ticket-logo" src="${printSettings.logoData}" alt="Logo">`:''}
@@ -832,6 +936,79 @@ function normalizeOrder(o){
  return o;
 }
 async function persistOnly(){return}
+
+
+async function saveShippingData(id){
+ if(!canEditShipping())return alert('Tu perfil no tiene permiso para editar datos de envío.');
+ const o=db.orders.find(x=>x.id===id); if(!o)return;
+
+ const destination=$('shipDest_'+id)?.value ?? o.destination ?? '';
+ const address=$('shipAddr_'+id)?.value ?? o.address ?? '';
+ const carrier=$('shipCarrier_'+id)?.value ?? o.carrier ?? '';
+ const tracking=$('shipTracking_'+id)?.value ?? o.tracking ?? '';
+ const pickupKey=$('shipPickup_'+id)?.value ?? o.pickupKey ?? '';
+
+ try{
+  const {error}=await supabaseClient.rpc('update_filium_shipping_data',{
+   p_order_id:id,
+   p_destination:destination,
+   p_address:address,
+   p_carrier:carrier,
+   p_tracking:tracking,
+   p_pickup_key:pickupKey
+  });
+  if(error)throw error;
+  await loadFromSupabase();
+  alert('Datos de envío actualizados.');
+ }catch(e){
+  console.error(e);
+  alert('No se pudieron guardar los datos de envío: '+(e.message||e));
+ }
+}
+
+async function markPreparationReady(id){
+ const o=db.orders.find(x=>x.id===id);
+ if(!o)return;
+ if(!canEditShipping())return alert('Tu perfil no tiene permiso para preparar pedidos.');
+
+ try{
+  if(o.fulfill!=='recojo_tienda'){
+   const destination=$('shipDest_'+id)?.value ?? o.destination ?? '';
+   const address=$('shipAddr_'+id)?.value ?? o.address ?? '';
+   const carrier=$('shipCarrier_'+id)?.value ?? o.carrier ?? '';
+   const tracking=$('shipTracking_'+id)?.value ?? o.tracking ?? '';
+   const pickupKey=$('shipPickup_'+id)?.value ?? o.pickupKey ?? '';
+
+   const {error:shipError}=await supabaseClient.rpc('update_filium_shipping_data',{
+    p_order_id:id,
+    p_destination:destination,
+    p_address:address,
+    p_carrier:carrier,
+    p_tracking:tracking,
+    p_pickup_key:pickupKey
+   });
+   if(shipError)throw shipError;
+  }
+
+  const {data,error}=await supabaseClient.rpc('set_filium_prep_ready',{
+   p_order_id:id,
+   p_ready:true
+  });
+  if(error)throw error;
+
+  await loadFromSupabase();
+
+  const updated=db.orders.find(x=>x.id===id);
+  if(updated && updated.prepReady){
+   loadShipLabel(id);
+   alert('Pedido marcado como listo. Ticket de envío generado.');
+  }
+ }catch(e){
+  console.error(e);
+  alert('No se pudo marcar como listo: '+(e.message||e));
+ }
+}
+
 async function updateOrderField(id,k,v){
  let o=db.orders.find(x=>x.id===id); if(!o)return;
  if(['shippingCost','packages'].includes(k)) v=Number(v||0);
@@ -886,10 +1063,11 @@ function renderLogistics(){
        <div><label>Cliente</label><input value="${o.client||''}" readonly></div>
        <div><label>DNI / RUC</label><input value="${o.dni||''}" readonly></div>
        <div><label>Celular</label><input value="${o.phone||''}" readonly></div>
-       ${isPickup?'':`<div><label>Destino</label><input value="${o.destination||''}" onchange="updateOrderField(${o.id},'destination',this.value)"></div>
-       <div><label>Dirección / Agencia</label><input value="${o.address||''}" onchange="updateOrderField(${o.id},'address',this.value)"></div>
-       <div><label>Operador</label><input value="${o.carrier||''}" onchange="updateOrderField(${o.id},'carrier',this.value)"></div>`}
+       ${isPickup?'':`<div><label>Destino</label><input id="shipDest_${o.id}" value="${o.destination||''}"></div>
+       <div><label>Dirección / Agencia</label><input id="shipAddr_${o.id}" value="${o.address||''}"></div>
+       <div><label>Operador</label><input id="shipCarrier_${o.id}" value="${o.carrier||''}"></div>`}
       </div>
+      ${isPickup?'':`<div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button></div>`}
     </div>
 
     ${isPickup?'':`<div class="panel" style="background:#fafafa">
@@ -899,22 +1077,25 @@ function renderLogistics(){
        <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
        <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
        <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
-       <div><label>Preparación</label><button class="btn ${o.prepReady?'secondary':''}" onclick="updateOrderField(${o.id},'prepReady',${!o.prepReady})">${o.prepReady?'✓ Listo':'Marcar listo'}</button></div>
-       <div><label>Ticket</label><button class="btn secondary" onclick="loadShipLabel(${o.id})" ${o.prepReady?'':'disabled'}>Generar ticket de envío</button></div>
+       <div><label>Preparación</label><button class="btn ${o.prepReady?'secondary':''}" onclick="${o.prepReady?`loadShipLabel(${o.id})`:`markPreparationReady(${o.id})`}">${o.prepReady?'✓ Listo · Ver ticket':'Marcar listo'}</button></div>
+       <div><label>Ticket</label><button class="btn secondary" onclick="loadShipLabel(${o.id})" ${o.prepReady?'':'disabled'}>${o.prepReady?'Ver / imprimir ticket':'Disponible al marcar listo'}</button></div>
       </div>
     </div>
 
     <div class="panel" style="background:#fafafa">
       <b>3. Despacho</b>
       <div class="grid3" style="margin-top:8px">
-       <div><label>N.º guía / Tracking</label><input value="${o.tracking||''}" onchange="updateOrderField(${o.id},'tracking',this.value)"></div>
-       <div><label>Clave de recojo</label><input value="${o.pickupKey||''}" onchange="updateOrderField(${o.id},'pickupKey',this.value)"></div>
+       <div><label>N.º guía / Tracking</label><input id="shipTracking_${o.id}" value="${o.tracking||''}"></div>
+       <div><label>Clave de recojo</label><input id="shipPickup_${o.id}" value="${o.pickupKey||''}"></div>
        <div><label>Costo de envío</label><input type="number" step="0.01" value="${o.shippingCost||0}" onchange="updateOrderField(${o.id},'shippingCost',this.value)"></div>
        <div><label>Quién paga</label><select onchange="updateOrderField(${o.id},'shippingPaidBy',this.value)"><option ${o.shippingPaidBy==='Cliente'?'selected':''}>Cliente</option><option ${o.shippingPaidBy==='FILIUM'?'selected':''}>FILIUM</option></select></div>
        <div><label>Estado pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentStatus',this.value)"><option ${o.shippingPaymentStatus==='Pendiente'?'selected':''}>Pendiente</option><option ${o.shippingPaymentStatus==='Pagado'?'selected':''}>Pagado</option></select></div>
        <div><label>Método pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentMethod',this.value)"><option value="">Seleccionar</option><option ${o.shippingPaymentMethod==='Efectivo'?'selected':''}>Efectivo</option><option ${o.shippingPaymentMethod==='Yape'?'selected':''}>Yape</option><option ${o.shippingPaymentMethod==='Plin'?'selected':''}>Plin</option><option ${o.shippingPaymentMethod==='Transferencia'?'selected':''}>Transferencia</option></select></div>
       </div>
-      <div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button></div>
+      <div class="actions" style="margin-top:10px">
+       <button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button>
+       <button class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button>
+      </div>
     </div>`}
 
     <div class="panel" style="background:#fafafa">
@@ -944,7 +1125,7 @@ function printLabel(){document.body.classList.add('print-label');window.print();
 function resetDemo(){location.reload()}
 function renderAll(){renderInventory();renderReceiptProducts();renderMovements();renderPreorders();renderOrders();renderLogistics();setTimeout(autoLoadPendingShipLabel,0);renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
-syncDeliveryFields();renderCart();loadPrintSettings();initAuth();
+syncDeliveryFields();renderCart();initAuth();
 $('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 </script>
 </body>
