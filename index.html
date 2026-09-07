@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FILIUM Lite · Operación</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--line:#dfe3e8;--text:#18212b;--muted:#667085;--accent:#2563eb;--danger:#b42318;--warn:#b54708}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+header{background:#111827;color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{margin:0;font-size:20px}.small{font-size:12px;color:var(--muted)}header .small{color:#d1d5db}
+nav{display:flex;gap:8px;overflow:auto;padding:12px 16px;background:#fff;border-bottom:1px solid var(--line)}
+nav button,.btn{border:1px solid transparent;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:700}
+nav button{background:#f3f4f6;color:#374151;white-space:nowrap;border-color:#e5e7eb}
+nav button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn{background:var(--accent);color:#fff}.btn.secondary{background:#fff;color:#374151;border-color:#d1d5db}.btn.danger{background:#b42318;color:#fff}
+main{padding:18px;max-width:1400px;margin:auto}.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:none!important}.toolbar{display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef2f6}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.err{background:#fee2e2;color:#991b1b}.info{background:#dbeafe;color:#1e40af}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px}.kpi b{display:block;font-size:22px;margin-top:4px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.notice{padding:10px;border-radius:8px;background:#eef4ff;margin:10px 0}
+.cart-box{border:1px solid #dbe3ef;border-radius:12px;padding:12px;background:#fbfdff;margin-top:12px}
+.collection-box{background:#f3e8ff;border:1px solid #d8b4fe;border-radius:12px;padding:14px;margin:14px 0}
+.order-card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:#fff}
+.order-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ship-label{width:62mm;min-height:100mm;background:#fff;color:#000;border:1px solid #bbb;padding:4mm;position:relative;font-family:Arial}
+.ship-label .destination{font-size:18px;font-weight:900;text-align:center;border-bottom:2px solid #000;padding-bottom:3mm;text-transform:uppercase}
+.ship-label .order-code{font-size:17px;font-weight:900;text-align:center;border:2px solid #000;padding:2.5mm 1mm;margin:3mm 0}
+.ticket{width:58mm;background:#fff;color:#000;padding:1mm;font-family:Arial;font-size:11px}
+.ticket .logo{font-size:22px;font-weight:900;text-align:center}.ticket hr{border:0;border-top:1px dashed #000}
+@media(max-width:800px){.grid,.grid3,.kpis{grid-template-columns:1fr}main{padding:10px}table{min-width:850px}}
+@media print{
+ body *{visibility:hidden}
+ body.print-ticket #ticket58,body.print-ticket #ticket58 *{visibility:visible}
+ body.print-ticket #ticket58{position:absolute;left:0;top:0;width:58mm}
+ body.print-label #shipLabel,body.print-label #shipLabel *{visibility:visible}
+ body.print-label #shipLabel{position:absolute;left:0;top:0;width:62mm;height:100mm;border:0}
+}
+</style>
+</head>
+<body>
+<header>
+ <div><h1>FILIUM · Lite</h1><div class="small">Inventario · Caja única · Preventa / Reserva · Pedidos · Motor logístico</div></div>
+ <div><span class="badge info">CAJA 01</span> <button class="btn secondary" onclick="resetDemo()">Restablecer demo</button></div>
+</header>
+
+<nav>
+ <button class="tab active" data-tab="resumen">Resumen</button>
+ <button class="tab" data-tab="inventario">Inventario</button>
+ <button class="tab" data-tab="caja">Caja</button>
+ <button class="tab" data-tab="preventa">Preventa / Reserva</button>
+ <button class="tab" data-tab="pedidos">Pedidos</button>
+ <button class="tab" data-tab="envios">Motor logístico</button>
+</nav>
+
+<main>
+<section id="resumen">
+ <div class="kpis">
+  <div class="kpi"><span class="small">Productos</span><b id="kProducts">0</b></div>
+  <div class="kpi"><span class="small">Pedidos</span><b id="kOrders">0</b></div>
+  <div class="kpi"><span class="small">Reservados</span><b id="kReserved">0</b></div>
+  <div class="kpi"><span class="small">Preventa</span><b id="kPreorder">0</b></div>
+ </div>
+ <div class="panel" style="margin-top:14px">
+  <h3>Operación FILIUM Lite</h3>
+  <div class="notice">La operación mantiene el flujo de INVERMAR, pero solo con los módulos esenciales.</div>
+ </div>
+</section>
+
+<section id="inventario" class="hidden">
+ <div class="panel">
+  <div class="toolbar"><div><h2>Inventario</h2><div class="small">SKU, precios, stock físico, disponible, reservados, preventa y tránsito.</div></div>
+   <div class="actions"><input id="stockSearch" placeholder="Buscar SKU o nombre" style="width:260px" oninput="renderInventory()"><button class="btn" onclick="toggleProductForm()">+ Nuevo producto</button></div>
+  </div>
+ </div>
+ <div id="productForm" class="panel hidden">
+  <h3>Producto</h3>
+  <div class="grid3">
+   <div><label>SKU</label><input id="pSku"></div><div><label>Nombre</label><input id="pName"></div><div><label>Categoría</label><input id="pCat"></div>
+   <div><label>Precio lista</label><input id="pList" type="number"></div><div><label>Precio negociable</label><input id="pNeg" type="number"></div><div><label>Precio mínimo</label><input id="pMin" type="number"></div>
+   <div><label>Costo</label><input id="pCost" type="number"></div><div><label>Stock físico</label><input id="pStock" type="number"></div><div><label>Exhibición</label><input id="pDisplay" type="number"></div>
+  </div>
+  <div class="actions" style="margin-top:12px"><button class="btn" onclick="saveProduct()">Guardar</button><button class="btn secondary" onclick="toggleProductForm()">Cancelar</button></div>
+ </div>
+ <div class="panel tablewrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Lista</th><th>Negociable</th><th>Mínimo</th><th>Costo</th><th>Stock físico</th><th>Disponible</th><th>Exhibición</th><th>Reservados</th><th>Preventa</th><th>Tránsito</th><th></th></tr></thead><tbody id="inventoryRows"></tbody></table></div>
+</section>
+
+<section id="caja" class="hidden">
+ <div class="panel">
+  <h2>Caja 01</h2>
+  <div class="grid3"><div><label>Cliente</label><input id="sClient"></div><div><label>DNI / RUC</label><input id="sDni"></div><div><label>Celular</label><input id="sPhone"></div></div>
+  <div class="panel" style="margin-top:14px;background:#fafafa">
+   <h3>Productos del pedido</h3>
+   <label>Buscar por SKU o nombre</label><input id="sSearch" placeholder="Buscar producto" oninput="renderProductSearch()">
+   <div id="sSearchResults" class="notice">Escribe para buscar.</div>
+   <div class="cart-box"><div class="tablewrap"><table><thead><tr><th>SKU / Producto</th><th>Disponible</th><th>Lista</th><th>Cant.</th><th>Precio aplicado</th><th>Subtotal</th><th></th></tr></thead><tbody id="sCartRows"></tbody></table></div></div>
+  </div>
+  <div class="collection-box">
+   <h3>Cobro</h3>
+   <div class="grid3">
+    <div><label>Total</label><input id="sTotal" readonly></div>
+    <div><label>Medio de pago</label><select id="sMethod"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select></div>
+    <div><label>N.º operación</label><input id="sOperation"></div>
+    <div><label>Importe recibido</label><input id="sReceived" type="number" value="0"></div>
+    <div><label>Saldo pendiente</label><input id="sBalance" readonly></div>
+    <div><label>Vuelto</label><input id="sChange" readonly></div>
+   </div>
+  </div>
+  <div class="grid3">
+   <div><label>Modalidad de entrega</label><select id="sFulfill" onchange="syncDeliveryFields()"><option value="recojo_tienda">Recojo en tienda</option><option value="delivery_lima">Delivery Lima</option><option value="agencia_destino">Envío a provincia</option></select></div>
+   <div id="deliveryDistrictWrap" class="hidden"><label>Distrito / destino</label><input id="sDestination"></div>
+   <div id="deliveryAddressWrap" class="hidden"><label>Dirección / agencia</label><input id="sAddress"></div>
+   <div id="carrierWrap" class="hidden"><label>Operador</label><select id="sCarrier"><option>Dinsides</option><option>GsG</option><option>Indrive</option><option>Shalom</option><option>Olva</option><option>Otro</option></select></div>
+  </div>
+  <div class="actions" style="margin-top:14px"><button class="btn" onclick="createSale()">Generar orden de pedido</button></div>
+ </div>
+ <div class="panel"><h3>Último ticket de venta</h3><div id="ticket58" class="ticket"><div class="logo">FILIUM</div><div style="text-align:center">Sin venta registrada</div></div><div class="actions" style="margin-top:12px"><button class="btn secondary" onclick="printTicket()">Imprimir 58 mm</button></div></div>
+</section>
+
+<section id="preventa" class="hidden">
+ <div class="panel">
+  <h2>Preventa / Reserva</h2>
+  <div class="notice"><b>Reserva:</b> producto con stock disponible y queda separado. <b>Preventa:</b> producto sin disponibilidad inmediata.</div>
+  <div class="grid3">
+   <div><label>Tipo</label><select id="prType"><option value="reserva">Reserva</option><option value="preventa">Preventa</option></select></div>
+   <div><label>Cliente</label><input id="prClient"></div><div><label>Celular</label><input id="prPhone"></div>
+   <div><label>Producto</label><select id="prProduct"></select></div><div><label>Cantidad</label><input id="prQty" type="number" min="1" value="1"></div>
+   <div><label>Adelanto</label><input id="prAdvance" type="number" value="0"></div>
+  </div>
+  <div class="actions" style="margin-top:14px"><button class="btn" onclick="createPreorder()">Registrar</button></div>
+ </div>
+ <div class="panel tablewrap"><table><thead><tr><th>Tipo</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Adelanto</th><th>Estado</th><th>Fecha</th></tr></thead><tbody id="preRows"></tbody></table></div>
+</section>
+
+<section id="pedidos" class="hidden">
+ <div class="panel">
+  <div class="toolbar"><div><h2>Panel de pedidos</h2><div class="small">Pago, modalidad y estado logístico.</div></div><input id="orderSearch" placeholder="Buscar pedido o cliente" style="width:260px" oninput="renderOrders()"></div>
+ </div>
+ <div id="ordersList"></div>
+</section>
+
+<section id="envios" class="hidden">
+ <div class="panel">
+  <div class="toolbar">
+   <div><h2>Motor logístico</h2><div class="small">Datos coordinados → Preparación → Despacho → En tránsito → En destino → Entregado.</div></div>
+   <div class="actions">
+    <input id="logSearch" placeholder="Buscar pedido / cliente" style="width:220px" oninput="renderLogistics()">
+    <select id="logType" style="width:180px" onchange="renderLogistics()">
+      <option value="">Todos los tipos</option><option value="delivery_lima">Lima</option><option value="agencia_destino">Provincia</option><option value="recojo_tienda">Recojo en tienda</option>
+    </select>
+    <select id="logFilter" style="width:180px" onchange="renderLogistics()">
+      <option value="">Todos los estados</option><option>Por alistar</option><option>En tránsito</option><option>En destino</option><option>Entregado</option>
+    </select>
+   </div>
+  </div>
+ </div>
+ <div id="logisticsList"></div>
+ <div class="panel"><h3>Ticket de envío</h3><div id="shipLabel" class="ship-label"><div class="destination">DESTINO</div><div class="order-code">SIN PEDIDO</div><div>Selecciona un pedido desde el motor logístico.</div></div><div class="actions" style="margin-top:12px"><button class="btn secondary" onclick="printLabel()">Imprimir 62 × 100 mm</button></div></div>
+</section>
+</main>
+
+<script>
+const LS='filium_lite_v2';
+let db=JSON.parse(localStorage.getItem(LS)||'null')||{
+ products:[
+  {id:1,sku:'FIL-001',name:'Producto Demo A',cat:'General',list:100,neg:95,min:90,cost:60,stock:10,display:1,reserved:0,preorder:0,transit:0},
+  {id:2,sku:'FIL-002',name:'Producto Demo B',cat:'General',list:180,neg:170,min:160,cost:110,stock:6,display:1,reserved:0,preorder:0,transit:0},
+  {id:3,sku:'FIL-003',name:'Accesorio Demo',cat:'Accesorios',list:35,neg:30,min:28,cost:18,stock:20,display:2,reserved:0,preorder:0,transit:0}
+ ],orders:[],preorders:[],seq:1
+};
+let cart=[],editingId=null;
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem(LS,JSON.stringify(db));renderAll()}
+function money(v){return 'S/ '+Number(v||0).toFixed(2)}
+function available(p){return Math.max(0,p.stock-p.display-p.reserved)}
+function orderCode(){return 'FIL-'+new Date().getFullYear()+'-'+String(db.seq++).padStart(6,'0')}
+function toggleProductForm(){ $('productForm').classList.toggle('hidden') }
+function saveProduct(){
+ let sku=$('pSku').value.trim(),name=$('pName').value.trim(); if(!sku||!name)return alert('Completa SKU y nombre.');
+ let p={id:editingId||Date.now(),sku,name,cat:$('pCat').value||'General',list:+$('pList').value||0,neg:+$('pNeg').value||0,min:+$('pMin').value||0,cost:+$('pCost').value||0,stock:+$('pStock').value||0,display:+$('pDisplay').value||0,reserved:0,preorder:0,transit:0};
+ let i=db.products.findIndex(x=>x.id===editingId); if(i>=0){p.reserved=db.products[i].reserved;p.preorder=db.products[i].preorder;p.transit=db.products[i].transit;db.products[i]=p}else db.products.push(p);
+ editingId=null;['pSku','pName','pCat','pList','pNeg','pMin','pCost','pStock','pDisplay'].forEach(x=>$(x).value='');$('productForm').classList.add('hidden');save();
+}
+function editProduct(id){let p=db.products.find(x=>x.id===id);editingId=id;Object.entries({pSku:p.sku,pName:p.name,pCat:p.cat,pList:p.list,pNeg:p.neg,pMin:p.min,pCost:p.cost,pStock:p.stock,pDisplay:p.display}).forEach(([k,v])=>$(k).value=v);$('productForm').classList.remove('hidden')}
+function renderInventory(){let q=($('stockSearch').value||'').toLowerCase();$('inventoryRows').innerHTML=db.products.filter(p=>(p.sku+' '+p.name).toLowerCase().includes(q)).map(p=>`<tr><td>${p.sku}</td><td><b>${p.name}</b><div class="small">${p.cat}</div></td><td>${money(p.list)}</td><td>${money(p.neg)}</td><td>${money(p.min)}</td><td>${money(p.cost)}</td><td>${p.stock}</td><td><b>${available(p)}</b></td><td>${p.display}</td><td>${p.reserved}</td><td>${p.preorder}</td><td>${p.transit}</td><td><button class="btn secondary" onclick="editProduct(${p.id})">Editar</button></td></tr>`).join('')}
+function renderProductSearch(){let q=($('sSearch').value||'').toLowerCase();let rows=db.products.filter(p=>available(p)>0&&(p.sku+' '+p.name).toLowerCase().includes(q)).slice(0,8);$('sSearchResults').innerHTML=rows.length?rows.map(p=>`<button class="btn secondary" style="margin:4px" onclick="addCart(${p.id})">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</button>`).join(''):'Sin coincidencias.'}
+function addCart(id){let p=db.products.find(x=>x.id===id),c=cart.find(x=>x.id===id);if(c){if(c.qty<available(p))c.qty++}else cart.push({id:p.id,sku:p.sku,name:p.name,price:p.list,qty:1});renderCart()}
+function renderCart(){let total=0;$('sCartRows').innerHTML=cart.map(c=>{let p=db.products.find(x=>x.id===c.id),sub=c.price*c.qty;total+=sub;return `<tr><td>${c.sku}<br><b>${c.name}</b></td><td>${available(p)}</td><td>${money(p.list)}</td><td><input type="number" min="1" max="${available(p)}" value="${c.qty}" style="width:80px" onchange="setCartQty(${c.id},this.value)"></td><td><input type="number" value="${c.price}" style="width:95px" onchange="setCartPrice(${c.id},this.value)"></td><td>${money(sub)}</td><td><button class="btn danger" onclick="removeCart(${c.id})">×</button></td></tr>`}).join('');$('sTotal').value=money(total);calcPay()}
+function setCartQty(id,v){let c=cart.find(x=>x.id===id),p=db.products.find(x=>x.id===id);c.qty=Math.max(1,Math.min(+v||1,available(p)));renderCart()}
+function setCartPrice(id,v){let c=cart.find(x=>x.id===id);c.price=Math.max(0,+v||0);renderCart()}
+function removeCart(id){cart=cart.filter(x=>x.id!==id);renderCart()}
+function calcPay(){let total=cart.reduce((a,c)=>a+c.price*c.qty,0),rec=+$('sReceived').value||0;$('sBalance').value=money(Math.max(0,total-rec));$('sChange').value=money(Math.max(0,rec-total))}
+$('sReceived').addEventListener('input',calcPay);
+function syncDeliveryFields(){let v=$('sFulfill').value,show=v!=='recojo_tienda';$('deliveryDistrictWrap').classList.toggle('hidden',!show);$('deliveryAddressWrap').classList.toggle('hidden',!show);$('carrierWrap').classList.toggle('hidden',!show)}
+function createSale(){
+ if(!cart.length)return alert('Agrega productos.');
+ let total=cart.reduce((a,c)=>a+c.price*c.qty,0),received=+$('sReceived').value||0;
+ for(let c of cart){let p=db.products.find(x=>x.id===c.id); if(c.qty>available(p))return alert('Stock insuficiente para '+p.name)}
+ let o={id:Date.now(),code:orderCode(),date:new Date().toISOString(),client:$('sClient').value||'Cliente general',dni:$('sDni').value,phone:$('sPhone').value,items:cart.map(x=>({...x})),total,received,balance:Math.max(0,total-received),payment:$('sMethod').value,operation:$('sOperation').value,fulfill:$('sFulfill').value,destination:$('sDestination').value,address:$('sAddress').value,carrier:$('sCarrier').value,status:'Por alistar',prepReady:false,packageType:'Caja',packages:1,weight:'',dimensions:'',tracking:'',pickupKey:'',shippingCost:0,shippingPaymentStatus:'Pendiente',shippingPaidBy:'Cliente',shippingPaymentMethod:'',deliveredAt:''};
+ for(let c of cart){db.products.find(x=>x.id===c.id).stock-=c.qty}
+ db.orders.push(o);buildTicket(o);cart=[];['sClient','sDni','sPhone','sSearch','sReceived','sOperation','sDestination','sAddress'].forEach(x=>$(x).value='');$('sReceived').value=0;save();alert('Pedido generado: '+o.code)
+}
+function buildTicket(o){$('ticket58').innerHTML=`<div class="logo">FILIUM</div><div style="text-align:center">TICKET DE VENTA</div><hr><div><b>${o.code}</b></div><div>${new Date(o.date).toLocaleString('es-PE')}</div><div>Cliente: ${o.client}</div><hr>${o.items.map(i=>`<div><b>${i.name}</b><br>${i.qty} × ${money(i.price)} = ${money(i.qty*i.price)}</div>`).join('')}<hr><div><b>TOTAL: ${money(o.total)}</b></div><div>Pago: ${o.payment}</div>${o.balance>0?`<div><b>Saldo pendiente: ${money(o.balance)}</b></div>`:''}<hr><div style="text-align:center">Gracias por su compra</div>`}
+function createPreorder(){
+ let type=$('prType').value,p=db.products.find(x=>x.id==$('prProduct').value),qty=+$('prQty').value||1;if(!p)return;
+ if(type==='reserva'&&qty>available(p))return alert('No hay stock disponible suficiente para reservar.');
+ let r={id:Date.now(),type,client:$('prClient').value||'Cliente',phone:$('prPhone').value,productId:p.id,product:p.name,qty,advance:+$('prAdvance').value||0,status:'Activo',date:new Date().toISOString()};
+ if(type==='reserva')p.reserved+=qty;else p.preorder+=qty;db.preorders.push(r);save()
+}
+function renderPreorders(){$('preRows').innerHTML=db.preorders.map(r=>`<tr><td><span class="badge ${r.type==='reserva'?'ok':'warn'}">${r.type}</span></td><td>${r.client}<div class="small">${r.phone||''}</div></td><td>${r.product}</td><td>${r.qty}</td><td>${money(r.advance)}</td><td>${r.status}</td><td>${new Date(r.date).toLocaleDateString('es-PE')}</td></tr>`).join('')}
+function fulfillLabel(o){return o.fulfill==='recojo_tienda'?'Recojo en tienda':o.fulfill==='delivery_lima'?'Delivery Lima':'Provincia'}
+function renderOrders(){let q=($('orderSearch').value||'').toLowerCase();let os=db.orders.filter(o=>(o.code+' '+o.client).toLowerCase().includes(q)).slice().reverse();$('ordersList').innerHTML=os.map(o=>`<div class="order-card"><div class="order-head"><div><b>${o.code}</b> · ${o.client}<div class="small">${new Date(o.date).toLocaleString('es-PE')} · ${fulfillLabel(o)}</div></div><div><span class="badge ${o.balance>0?'warn':'ok'}">${o.balance>0?'Pago pendiente':'Pagado'}</span> <span class="badge info">${o.status}</span></div></div><div style="margin-top:8px">${o.items.map(i=>`${i.qty}× ${i.name}`).join(' · ')}</div><div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="buildTicketById(${o.id})">Ticket venta</button></div></div>`).join('')}
+function buildTicketById(id){let o=db.orders.find(x=>x.id===id);buildTicket(o);document.querySelector('[data-tab="caja"]').click()}
+function normalizeOrder(o){
+ if(o.prepReady===undefined)o.prepReady=false;
+ if(!o.packageType)o.packageType='Caja';
+ if(!o.packages)o.packages=1;
+ if(o.weight===undefined)o.weight='';
+ if(o.dimensions===undefined)o.dimensions='';
+ if(o.shippingCost===undefined)o.shippingCost=0;
+ if(!o.shippingPaymentStatus)o.shippingPaymentStatus='Pendiente';
+ if(!o.shippingPaidBy)o.shippingPaidBy='Cliente';
+ if(o.shippingPaymentMethod===undefined)o.shippingPaymentMethod='';
+ if(o.deliveredAt===undefined)o.deliveredAt='';
+ return o;
+}
+function persistOnly(){localStorage.setItem(LS,JSON.stringify(db))}
+function updateOrderField(id,k,v){
+ let o=db.orders.find(x=>x.id===id); if(!o)return;
+ if(['shippingCost','packages'].includes(k)) v=Number(v||0);
+ if(k==='prepReady') v=(v===true||v==='true');
+ o[k]=v; persistOnly(); renderOrders(); renderLogistics();
+}
+function processShippingPayment(id){
+ let o=db.orders.find(x=>x.id===id); if(!o)return;
+ if(Number(o.shippingCost||0)<=0){alert('Ingresa el costo de envío antes de procesar el pago.');return}
+ o.shippingPaymentStatus='Pagado'; persistOnly(); renderLogistics();
+}
+function setLogStatus(id,status){
+ let o=db.orders.find(x=>x.id===id); if(!o)return;
+ if(status==='En tránsito' && o.fulfill!=='recojo_tienda' && !o.prepReady){alert('Primero marca la preparación como LISTA.');return}
+ if(status==='Entregado' && o.balance>0){alert('El pedido tiene saldo pendiente. Cóbrralo antes de marcarlo como entregado.');return}
+ o.status=status;
+ if(status==='Entregado')o.deliveredAt=new Date().toISOString();
+ persistOnly(); renderOrders(); renderLogistics();
+}
+function collectBalance(id){
+ let o=db.orders.find(x=>x.id===id); if(!o)return;
+ if(o.balance<=0)return;
+ let amount=prompt('Saldo pendiente '+money(o.balance)+'. Ingresa el importe cobrado:',o.balance);
+ if(amount===null)return;
+ let n=Number(amount); if(!n||n<=0)return alert('Importe inválido.');
+ let paid=Math.min(n,o.balance); o.received+=paid; o.balance=Math.max(0,o.total-o.received);
+ persistOnly(); buildTicket(o); renderOrders(); renderLogistics();
+}
+function renderLogistics(){
+ let f=$('logFilter').value,t=$('logType').value,q=($('logSearch').value||'').toLowerCase();
+ let os=db.orders.map(normalizeOrder).filter(o=>(!f||o.status===f)&&(!t||o.fulfill===t)&&(o.code+' '+o.client+' '+(o.destination||'')).toLowerCase().includes(q)).slice().reverse();
+ $('logisticsList').innerHTML=os.length?os.map(o=>{
+   let isPickup=o.fulfill==='recojo_tienda';
+   let prepBadge=o.prepReady?'<span class="badge ok">Preparación lista</span>':'<span class="badge warn">Pendiente de alistar</span>';
+   return `<div class="order-card">
+    <div class="order-head">
+      <div><b>${o.code}</b> · ${o.client}<div class="small">${fulfillLabel(o)}${isPickup?'':' · '+(o.carrier||'-')+' · '+(o.destination||'-')}</div></div>
+      <div>${prepBadge} <span class="badge info">${o.status}</span> <span class="badge ${o.balance>0?'warn':'ok'}">${o.balance>0?'Saldo '+money(o.balance):'Pagado'}</span></div>
+    </div>
+
+    <div class="panel" style="margin-top:10px;background:#fafafa">
+      <b>1. Datos coordinados</b>
+      <div class="grid3" style="margin-top:8px">
+       <div><label>Cliente</label><input value="${o.client||''}" readonly></div>
+       <div><label>DNI / RUC</label><input value="${o.dni||''}" readonly></div>
+       <div><label>Celular</label><input value="${o.phone||''}" readonly></div>
+       ${isPickup?'':`<div><label>Destino</label><input value="${o.destination||''}" onchange="updateOrderField(${o.id},'destination',this.value)"></div>
+       <div><label>Dirección / Agencia</label><input value="${o.address||''}" onchange="updateOrderField(${o.id},'address',this.value)"></div>
+       <div><label>Operador</label><input value="${o.carrier||''}" onchange="updateOrderField(${o.id},'carrier',this.value)"></div>`}
+      </div>
+    </div>
+
+    ${isPickup?'':`<div class="panel" style="background:#fafafa">
+      <b>2. Preparación</b>
+      <div class="grid3" style="margin-top:8px">
+       <div><label>Tipo de empaque</label><select onchange="updateOrderField(${o.id},'packageType',this.value)"><option ${o.packageType==='Caja'?'selected':''}>Caja</option><option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option><option ${o.packageType==='Sobre'?'selected':''}>Sobre</option><option ${o.packageType==='Otro'?'selected':''}>Otro</option></select></div>
+       <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
+       <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
+       <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
+       <div><label>Preparación</label><button class="btn ${o.prepReady?'secondary':''}" onclick="updateOrderField(${o.id},'prepReady',${!o.prepReady})">${o.prepReady?'✓ Listo':'Marcar listo'}</button></div>
+       <div><label>Ticket</label><button class="btn secondary" onclick="loadShipLabel(${o.id})" ${o.prepReady?'':'disabled'}>Generar ticket de envío</button></div>
+      </div>
+    </div>
+
+    <div class="panel" style="background:#fafafa">
+      <b>3. Despacho</b>
+      <div class="grid3" style="margin-top:8px">
+       <div><label>N.º guía / Tracking</label><input value="${o.tracking||''}" onchange="updateOrderField(${o.id},'tracking',this.value)"></div>
+       <div><label>Clave de recojo</label><input value="${o.pickupKey||''}" onchange="updateOrderField(${o.id},'pickupKey',this.value)"></div>
+       <div><label>Costo de envío</label><input type="number" step="0.01" value="${o.shippingCost||0}" onchange="updateOrderField(${o.id},'shippingCost',this.value)"></div>
+       <div><label>Quién paga</label><select onchange="updateOrderField(${o.id},'shippingPaidBy',this.value)"><option ${o.shippingPaidBy==='Cliente'?'selected':''}>Cliente</option><option ${o.shippingPaidBy==='FILIUM'?'selected':''}>FILIUM</option></select></div>
+       <div><label>Estado pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentStatus',this.value)"><option ${o.shippingPaymentStatus==='Pendiente'?'selected':''}>Pendiente</option><option ${o.shippingPaymentStatus==='Pagado'?'selected':''}>Pagado</option></select></div>
+       <div><label>Método pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentMethod',this.value)"><option value="">Seleccionar</option><option ${o.shippingPaymentMethod==='Efectivo'?'selected':''}>Efectivo</option><option ${o.shippingPaymentMethod==='Yape'?'selected':''}>Yape</option><option ${o.shippingPaymentMethod==='Plin'?'selected':''}>Plin</option><option ${o.shippingPaymentMethod==='Transferencia'?'selected':''}>Transferencia</option></select></div>
+      </div>
+      <div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button></div>
+    </div>`}
+
+    <div class="panel" style="background:#fafafa">
+      <b>${isPickup?'2':'4'}. Seguimiento</b>
+      <div class="grid3" style="margin-top:8px">
+       <div><label>Estado logístico</label><select onchange="setLogStatus(${o.id},this.value)">
+        <option ${o.status==='Por alistar'?'selected':''}>Por alistar</option>
+        <option ${o.status==='En tránsito'?'selected':''}>En tránsito</option>
+        <option ${o.status==='En destino'?'selected':''}>En destino</option>
+        <option ${o.status==='Entregado'?'selected':''}>Entregado</option>
+       </select></div>
+       <div><label>Pago de compra</label><div style="padding-top:8px">${o.balance>0?`<button class="btn" onclick="collectBalance(${o.id})">Cobrar saldo ${money(o.balance)}</button>`:'<span class="badge ok">Compra pagada</span>'}</div></div>
+       <div><label>Entrega</label><div style="padding-top:8px">${o.deliveredAt?`<span class="badge ok">Entregado ${new Date(o.deliveredAt).toLocaleString('es-PE')}</span>`:'<span class="small">Pendiente</span>'}</div></div>
+      </div>
+    </div>
+   </div>`;
+ }).join(''):'<div class="panel"><div class="small">No hay pedidos que coincidan con los filtros.</div></div>';
+}
+function updateOrder(id,k,v){updateOrderField(id,k,v)}
+function loadShipLabel(id){
+ let o=normalizeOrder(db.orders.find(x=>x.id===id)); if(!o)return;
+ if(o.fulfill!=='recojo_tienda'&&!o.prepReady){alert('Primero completa la preparación y marca el pedido como LISTO.');return}
+ $('shipLabel').innerHTML=`<div class="destination">${o.destination||'RECOJO EN TIENDA'}</div><div style="text-align:center;font-weight:800;margin:2mm 0">${fulfillLabel(o)} · ${o.carrier||'FILIUM'}</div><div class="order-code">${o.code}</div><div><b>DESTINATARIO</b><br>${o.client}<br>DNI / RUC: ${o.dni||'-'}<br>${o.phone||'-'}</div><hr>${o.fulfill==='recojo_tienda'?'':`<div><b>Dirección / Agencia</b><br>${o.address||'-'}</div><hr>`}<div style="text-align:center;font-weight:800">¡Gracias por tu compra!</div>`;
+}
+function printTicket(){document.body.classList.add('print-ticket');window.print();setTimeout(()=>document.body.classList.remove('print-ticket'),300)}
+function printLabel(){document.body.classList.add('print-label');window.print();setTimeout(()=>document.body.classList.remove('print-label'),300)}
+function resetDemo(){if(confirm('¿Restablecer datos demo de FILIUM Lite?')){localStorage.removeItem(LS);location.reload()}}
+function renderAll(){renderInventory();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
+db.orders=db.orders.map(normalizeOrder);persistOnly();syncDeliveryFields();renderAll();
+</script>
+</body>
+</html>
