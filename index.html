@@ -388,7 +388,7 @@ async function loadFromSupabase(){
   db.orders=(or.data||[]).map(r=>orderFromRow(r,itemsByOrder[r.id]||[]));
   db.preorders=(rr.data||[]).map(r=>({id:r.id,type:r.type,client:r.customer_name||'',phone:r.phone||'',productId:r.product_id,product:r.product_name||'',qty:Number(r.quantity||1),advance:Number(r.advance||0),status:r.status||'Activo',date:r.created_at}));
   db.movements=(mr.data||[]);
-  const years=db.orders.map(o=>parseInt((o.code||'').split('-').pop())).filter(Number.isFinite); db.seq=Math.max(529,(years.length?Math.max(...years)+1:529));
+  const years=db.orders.map(o=>parseInt((o.code||'').split('-').pop())).filter(Number.isFinite); db.seq=Math.max(100529,(years.length?Math.max(...years)+1:100529));
   setDbStatus(true,'conectado');
   renderAll();
  }catch(e){
