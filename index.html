@@ -95,7 +95,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
  </div>
  <div class="panel" style="margin-top:14px">
   <h3>Operación FILIUM Lite</h3>
-  <div class="notice">La operación mantiene el flujo de INVERMAR, pero solo con los módulos esenciales. <b>Datos sincronizados con Supabase.</b></div>
+  <div class="notice">Datos sincronizados con Supabase. <b>Tienda</b> puede vender y confirmar ingresos; <b>Supervisor</b> puede vender y además gestionar inventario; <b>Administrador</b> tiene control total.</div>
  </div>
 </section>
 
@@ -115,6 +115,42 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   <div class="actions" style="margin-top:12px"><button class="btn" onclick="saveProduct()">Guardar</button><button class="btn secondary" onclick="toggleProductForm()">Cancelar</button></div>
  </div>
  <div class="panel tablewrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Lista</th><th>Negociable</th><th>Mínimo</th><th>Costo</th><th>Stock físico</th><th>Disponible</th><th>Exhibición</th><th>Reservados</th><th>Preventa</th><th>Tránsito</th><th></th></tr></thead><tbody id="inventoryRows"></tbody></table></div>
+
+ <div id="receiptPanel" class="panel">
+  <div class="toolbar">
+   <div>
+    <h3>Confirmar ingreso de productos</h3>
+    <div class="small">Confirma mercadería que figura en tránsito. Si existe diferencia, la observación es obligatoria.</div>
+   </div>
+  </div>
+  <div class="grid3" style="margin-top:12px">
+   <div>
+    <label>Producto con ingreso pendiente</label>
+    <select id="receiptProduct" onchange="syncReceiptExpected()"></select>
+   </div>
+   <div>
+    <label>Cantidad esperada</label>
+    <input id="receiptExpected" type="number" readonly>
+   </div>
+   <div>
+    <label>Cantidad recibida</label>
+    <input id="receiptReceived" type="number" min="0" value="0" oninput="updateReceiptDifference()">
+   </div>
+  </div>
+  <div class="grid" style="margin-top:10px">
+   <div>
+    <label>Diferencia</label>
+    <input id="receiptDifference" readonly>
+   </div>
+   <div>
+    <label>Observación <span class="small">(obligatoria si hay diferencia)</span></label>
+    <textarea id="receiptObservation" rows="2" placeholder="Ej.: llegó 1 unidad menos, caja dañada, unidad adicional, etc."></textarea>
+   </div>
+  </div>
+  <div class="actions" style="margin-top:12px">
+   <button class="btn" onclick="confirmInventoryReceipt()">Confirmar ingreso</button>
+  </div>
+ </div>
 
  <div class="panel">
   <div class="toolbar">
@@ -226,6 +262,8 @@ let currentUser=null;
 let currentProfile=null;
 const ROLE_LABELS={tienda:'Tienda',supervisor:'Supervisor',administrador:'Administrador'};
 function canManageInventory(){return currentProfile && ['supervisor','administrador'].includes(currentProfile.role)}
+function canReceiveInventory(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
+function canGenerateSales(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
 function actorName(){return currentProfile?.full_name || currentUser?.email || 'Usuario'}
 function actorRole(){return currentProfile?.role || 'sin_perfil'}
 const $=id=>document.getElementById(id);
@@ -266,7 +304,9 @@ function applyPermissions(){
  const manage=canManageInventory();
  $('newProductBtn').classList.toggle('hidden',!manage);
  if(!manage)$('productForm').classList.add('hidden');
+ if($('receiptPanel'))$('receiptPanel').classList.toggle('hidden',!canReceiveInventory());
  renderInventory();
+ renderReceiptProducts();
 }
 async function startSession(user){
  try{
@@ -394,6 +434,58 @@ function movementBadge(t){
  const cls=t==='entrada'?'ok':t==='salida'?'err':t==='reserva'?'warn':t==='preventa'?'info':'badge';
  return `<span class="badge ${cls}">${t}</span>`;
 }
+
+function renderReceiptProducts(){
+ if(!$('receiptProduct'))return;
+ const pending=db.products.filter(p=>Number(p.transit||0)>0);
+ $('receiptProduct').innerHTML=pending.length
+   ? pending.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · En tránsito: ${p.transit}</option>`).join('')
+   : '<option value="">Sin productos en tránsito</option>';
+ syncReceiptExpected();
+}
+function syncReceiptExpected(){
+ if(!$('receiptProduct'))return;
+ const p=db.products.find(x=>String(x.id)===String($('receiptProduct').value));
+ $('receiptExpected').value=p?Number(p.transit||0):0;
+ $('receiptReceived').value=p?Number(p.transit||0):0;
+ updateReceiptDifference();
+}
+function updateReceiptDifference(){
+ if(!$('receiptDifference'))return;
+ const expected=Number($('receiptExpected').value||0);
+ const received=Number($('receiptReceived').value||0);
+ const diff=received-expected;
+ $('receiptDifference').value=(diff>0?'+':'')+diff;
+}
+async function confirmInventoryReceipt(){
+ if(!canReceiveInventory())return alert('Tu perfil no tiene permiso para confirmar ingresos.');
+ const productId=Number($('receiptProduct').value||0);
+ const expected=Number($('receiptExpected').value||0);
+ const received=Number($('receiptReceived').value||0);
+ const observation=$('receiptObservation').value.trim();
+ if(!productId)return alert('No hay un producto en tránsito seleccionado.');
+ if(expected<=0)return alert('El producto no tiene unidades pendientes en tránsito.');
+ if(received<0)return alert('La cantidad recibida no puede ser negativa.');
+ const diff=received-expected;
+ if(diff!==0 && !observation)return alert('Hay una diferencia de '+diff+' unidad(es). Debes ingresar una observación.');
+ if(!confirm(`¿Confirmar ingreso?\nEsperado: ${expected}\nRecibido: ${received}\nDiferencia: ${diff}`))return;
+ try{
+   const {error}=await supabaseClient.rpc('confirm_inventory_receipt',{
+     p_product_id:productId,
+     p_expected_qty:expected,
+     p_received_qty:received,
+     p_observation:observation
+   });
+   if(error)throw error;
+   $('receiptObservation').value='';
+   await loadFromSupabase();
+   alert('Ingreso confirmado correctamente.');
+ }catch(e){
+   console.error(e);
+   alert('Error confirmando ingreso: '+(e.message||e));
+ }
+}
+
 function renderMovements(){
  const q=(($('movSearch')?.value)||'').toLowerCase();
  const t=$('movTypeFilter')?.value||'';
@@ -427,27 +519,69 @@ function calcPay(){let total=cart.reduce((a,c)=>a+c.price*c.qty,0),rec=+$('sRece
 $('sReceived').addEventListener('input',calcPay);
 function syncDeliveryFields(){let v=$('sFulfill').value,show=v!=='recojo_tienda';$('deliveryDistrictWrap').classList.toggle('hidden',!show);$('deliveryAddressWrap').classList.toggle('hidden',!show);$('carrierWrap').classList.toggle('hidden',!show)}
 async function createSale(){
+ if(!canGenerateSales())return alert('Tu perfil no tiene permiso para generar ventas.');
  if(!cart.length)return alert('Agrega productos.');
  let total=cart.reduce((a,c)=>a+c.price*c.qty,0),received=+$('sReceived').value||0;
- for(let c of cart){let p=db.products.find(x=>x.id===c.id); if(c.qty>available(p))return alert('Stock insuficiente para '+p.name)}
- const code=orderCode();
- const base={order_code:code,customer_name:$('sClient').value||'Cliente general',dni_ruc:$('sDni').value,phone:$('sPhone').value,total,received,balance:Math.max(0,total-received),payment_method:$('sMethod').value,payment_operation:$('sOperation').value,fulfillment_type:$('sFulfill').value,destination:$('sDestination').value,address:$('sAddress').value,carrier:$('sCarrier').value,logistic_status:'Por alistar',prep_ready:false,package_type:'Caja',packages:1,shipping_cost:0,shipping_payment_status:'Pendiente',shipping_paid_by:'Cliente'};
+ for(let c of cart){let p=db.products.find(x=>x.id===c.id); if(!p||c.qty>available(p))return alert('Stock insuficiente para '+(p?.name||c.name))}
+ const orderPayload={
+   customer_name:$('sClient').value||'Cliente general',
+   dni_ruc:$('sDni').value,
+   phone:$('sPhone').value,
+   total:total,
+   received:received,
+   balance:Math.max(0,total-received),
+   payment_method:$('sMethod').value,
+   payment_operation:$('sOperation').value,
+   fulfillment_type:$('sFulfill').value,
+   destination:$('sDestination').value,
+   address:$('sAddress').value,
+   carrier:$('sCarrier').value
+ };
+ const itemsPayload=cart.map(c=>({
+   product_id:c.id,
+   sku:c.sku,
+   product_name:c.name,
+   quantity:c.qty,
+   unit_price:c.price,
+   subtotal:c.price*c.qty
+ }));
  try{
-   const {data:orderRows,error:oe}=await supabaseClient.from('orders').insert(base).select(); if(oe)throw oe;
-   const order=orderRows[0];
-   const itemRows=cart.map(c=>({order_id:order.id,product_id:c.id,sku:c.sku,product_name:c.name,quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty}));
-   const {error:ie}=await supabaseClient.from('order_items').insert(itemRows); if(ie)throw ie;
-   for(const c of cart){
-     const p=db.products.find(x=>x.id===c.id);
-     const before=Number(p.stock||0), after=before-c.qty;
-     const {error:pe}=await supabaseClient.from('products').update({stock:after,updated_at:new Date().toISOString()}).eq('id',p.id);
-     if(pe)throw pe;
-     await recordMovement({product:p,type:'salida',qty:-c.qty,before,after,reference:code,detail:'Venta registrada en Caja 01'});
-   }
-   const local=orderFromRow(order,cart.map(x=>({...x}))); buildTicket(local);
-   cart=[];['sClient','sDni','sPhone','sSearch','sReceived','sOperation','sDestination','sAddress'].forEach(x=>$(x).value='');$('sReceived').value=0;
-   await loadFromSupabase(); alert('Pedido generado: '+code);
- }catch(e){console.error(e);alert('Error creando pedido: '+e.message)}
+   const {data,error}=await supabaseClient.rpc('create_filium_sale',{
+     p_order:orderPayload,
+     p_items:itemsPayload
+   });
+   if(error)throw error;
+   const result=Array.isArray(data)?data[0]:data;
+   const code=result?.order_code||'FILIUM';
+   const local={
+     id:result?.order_id||Date.now(),
+     code,
+     date:result?.created_at||new Date().toISOString(),
+     client:orderPayload.customer_name,
+     dni:orderPayload.dni_ruc,
+     phone:orderPayload.phone,
+     items:cart.map(x=>({...x})),
+     total,
+     received,
+     balance:orderPayload.balance,
+     payment:orderPayload.payment_method,
+     operation:orderPayload.payment_operation,
+     fulfill:orderPayload.fulfillment_type,
+     destination:orderPayload.destination,
+     address:orderPayload.address,
+     carrier:orderPayload.carrier,
+     status:'Por alistar'
+   };
+   buildTicket(local);
+   cart=[];
+   ['sClient','sDni','sPhone','sSearch','sReceived','sOperation','sDestination','sAddress'].forEach(x=>$(x).value='');
+   $('sReceived').value=0;
+   await loadFromSupabase();
+   alert('Pedido generado: '+code);
+ }catch(e){
+   console.error(e);
+   alert('Error creando pedido: '+(e.message||e));
+ }
 }
 function buildTicket(o){$('ticket58').innerHTML=`<div class="logo">FILIUM</div><div style="text-align:center">TICKET DE VENTA</div><hr><div><b>${o.code}</b></div><div>${new Date(o.date).toLocaleString('es-PE')}</div><div>Cliente: ${o.client}</div><hr>${o.items.map(i=>`<div><b>${i.name}</b><br>${i.qty} × ${money(i.price)} = ${money(i.qty*i.price)}</div>`).join('')}<hr><div><b>TOTAL: ${money(o.total)}</b></div><div>Pago: ${o.payment}</div>${o.balance>0?`<div><b>Saldo pendiente: ${money(o.balance)}</b></div>`:''}<hr><div style="text-align:center">Gracias por su compra</div>`}
 async function createPreorder(){
@@ -593,7 +727,7 @@ function loadShipLabel(id){
 function printTicket(){document.body.classList.add('print-ticket');window.print();setTimeout(()=>document.body.classList.remove('print-ticket'),300)}
 function printLabel(){document.body.classList.add('print-label');window.print();setTimeout(()=>document.body.classList.remove('print-label'),300)}
 function resetDemo(){location.reload()}
-function renderAll(){renderInventory();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
+function renderAll(){renderInventory();renderReceiptProducts();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
 syncDeliveryFields();renderCart();initAuth();
 $('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
