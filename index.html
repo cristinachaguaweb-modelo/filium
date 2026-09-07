@@ -31,6 +31,15 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 .ship-label .order-code{font-size:17px;font-weight:900;text-align:center;border:2px solid #000;padding:2.5mm 1mm;margin:3mm 0}
 .ticket{width:58mm;background:#fff;color:#000;padding:1mm;font-family:Arial;font-size:11px}
 .ticket .logo{font-size:22px;font-weight:900;text-align:center}.ticket hr{border:0;border-top:1px dashed #000}
+
+.auth-screen{position:fixed;inset:0;background:#f5f7fb;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.auth-card{width:min(420px,100%);background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 18px 50px rgba(0,0,0,.12)}
+.auth-card h1{margin:0 0 6px}.auth-card .brandline{font-weight:900;font-size:22px}
+.auth-card .grid{grid-template-columns:1fr}.auth-error{background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px;margin-top:10px;display:none}
+.userbox{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.role-tienda{background:#e0f2fe;color:#075985}.role-supervisor{background:#fef3c7;color:#92400e}.role-administrador{background:#dcfce7;color:#166534}
+.permission-note{font-size:11px;color:var(--muted);margin-top:5px}
+
 @media(max-width:800px){.grid,.grid3,.kpis{grid-template-columns:1fr}main{padding:10px}table{min-width:850px}}
 @media print{
  body *{visibility:hidden}
@@ -42,9 +51,29 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 </style>
 </head>
 <body>
+
+<div id="authScreen" class="auth-screen">
+ <div class="auth-card">
+  <div class="brandline">FILIUM · Lite</div>
+  <div class="small" style="margin-bottom:18px">Inicia sesión para acceder a la plataforma</div>
+  <div class="grid">
+   <div><label>Correo</label><input id="loginEmail" type="email" autocomplete="username" placeholder="usuario@empresa.com"></div>
+   <div><label>Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password"></div>
+   <button id="loginBtn" class="btn" onclick="login()">Ingresar</button>
+  </div>
+  <div id="authError" class="auth-error"></div>
+ </div>
+</div>
+
 <header>
  <div><h1>FILIUM · Lite</h1><div class="small">Inventario · Caja única · Preventa / Reserva · Pedidos · Motor logístico</div></div>
- <div><span id="dbStatus" class="badge warn">Supabase: conectando…</span> <span class="badge info">CAJA 01</span></div>
+ <div class="userbox">
+ <span id="dbStatus" class="badge warn">Supabase: esperando sesión</span>
+ <span class="badge info">CAJA 01</span>
+ <span id="roleBadge" class="badge">Sin perfil</span>
+ <span id="userName" class="small" style="color:#fff"></span>
+ <button class="btn secondary" onclick="logout()">Cerrar sesión</button>
+</div>
 </header>
 
 <nav>
@@ -73,7 +102,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 <section id="inventario" class="hidden">
  <div class="panel">
   <div class="toolbar"><div><h2>Inventario</h2><div class="small">SKU, precios, stock físico, disponible, reservados, preventa y tránsito.</div></div>
-   <div class="actions"><input id="stockSearch" placeholder="Buscar SKU o nombre" style="width:260px" oninput="renderInventory()"><button class="btn" onclick="toggleProductForm()">+ Nuevo producto</button></div>
+   <div class="actions"><input id="stockSearch" placeholder="Buscar SKU o nombre" style="width:260px" oninput="renderInventory()"><button id="newProductBtn" class="btn" onclick="toggleProductForm()">+ Nuevo producto</button></div>
   </div>
  </div>
  <div id="productForm" class="panel hidden">
@@ -104,7 +133,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   </div>
   <div class="tablewrap" style="margin-top:10px">
    <table>
-    <thead><tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Producto</th><th>Cantidad</th><th>Stock antes</th><th>Stock después</th><th>Referencia</th><th>Detalle</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Producto</th><th>Cantidad</th><th>Stock antes</th><th>Stock después</th><th>Usuario</th><th>Perfil</th><th>Referencia</th><th>Detalle</th></tr></thead>
     <tbody id="movementRows"></tbody>
    </table>
   </div>
@@ -193,7 +222,74 @@ const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const LS='filium_lite_v2';
 let db={products:[],orders:[],preorders:[],movements:[],seq:1};
 let cart=[],editingId=null;
+let currentUser=null;
+let currentProfile=null;
+const ROLE_LABELS={tienda:'Tienda',supervisor:'Supervisor',administrador:'Administrador'};
+function canManageInventory(){return currentProfile && ['supervisor','administrador'].includes(currentProfile.role)}
+function actorName(){return currentProfile?.full_name || currentUser?.email || 'Usuario'}
+function actorRole(){return currentProfile?.role || 'sin_perfil'}
 const $=id=>document.getElementById(id);
+
+
+function showAuthError(msg){
+ const el=$('authError'); el.textContent=msg||''; el.style.display=msg?'block':'none';
+}
+async function login(){
+ showAuthError('');
+ const email=$('loginEmail').value.trim(),password=$('loginPassword').value;
+ if(!email||!password)return showAuthError('Ingresa correo y contraseña.');
+ $('loginBtn').disabled=true;$('loginBtn').textContent='Ingresando…';
+ try{
+  const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
+  if(error)throw error;
+  await startSession(data.user);
+ }catch(e){showAuthError(e.message||'No se pudo iniciar sesión.')}
+ finally{$('loginBtn').disabled=false;$('loginBtn').textContent='Ingresar'}
+}
+async function logout(){
+ await supabaseClient.auth.signOut();
+ currentUser=null;currentProfile=null;
+ $('authScreen').classList.remove('hidden');
+ $('dbStatus').className='badge warn';$('dbStatus').textContent='Supabase: esperando sesión';
+}
+async function loadProfile(user){
+ const {data,error}=await supabaseClient.from('profiles').select('id,full_name,role').eq('id',user.id).single();
+ if(error)throw new Error('El usuario no tiene un perfil FILIUM configurado.');
+ if(!['tienda','supervisor','administrador'].includes(data.role))throw new Error('El perfil no tiene un rol válido.');
+ return data;
+}
+function applyPermissions(){
+ const role=currentProfile?.role||'';
+ $('roleBadge').textContent=ROLE_LABELS[role]||'Sin perfil';
+ $('roleBadge').className='badge role-'+role;
+ $('userName').textContent=actorName();
+ const manage=canManageInventory();
+ $('newProductBtn').classList.toggle('hidden',!manage);
+ if(!manage)$('productForm').classList.add('hidden');
+ renderInventory();
+}
+async function startSession(user){
+ try{
+  currentUser=user;
+  currentProfile=await loadProfile(user);
+  $('authScreen').classList.add('hidden');
+  applyPermissions();
+  await loadFromSupabase();
+ }catch(e){
+  await supabaseClient.auth.signOut();
+  currentUser=null;currentProfile=null;
+  $('authScreen').classList.remove('hidden');
+  showAuthError(e.message||'No se pudo cargar el perfil.');
+ }
+}
+async function initAuth(){
+ const {data:{session}}=await supabaseClient.auth.getSession();
+ if(session?.user) await startSession(session.user);
+ else $('authScreen').classList.remove('hidden');
+ supabaseClient.auth.onAuthStateChange((event,session)=>{
+   if(event==='SIGNED_OUT')$('authScreen').classList.remove('hidden');
+ });
+}
 
 function setDbStatus(ok,msg){
  const el=$('dbStatus'); if(!el)return;
@@ -213,6 +309,7 @@ function orderToPatch(o){
  return {customer_name:o.client,dni_ruc:o.dni,phone:o.phone,total:o.total,received:o.received,balance:o.balance,payment_method:o.payment,payment_operation:o.operation,fulfillment_type:o.fulfill,destination:o.destination,address:o.address,carrier:o.carrier,logistic_status:o.status,prep_ready:o.prepReady,package_type:o.packageType,packages:o.packages,weight:o.weight,dimensions:o.dimensions,tracking:o.tracking,pickup_key:o.pickupKey,shipping_cost:o.shippingCost,shipping_payment_status:o.shippingPaymentStatus,shipping_paid_by:o.shippingPaidBy,shipping_payment_method:o.shippingPaymentMethod,delivered_at:o.deliveredAt||null,updated_at:new Date().toISOString()}
 }
 async function loadFromSupabase(){
+ if(!currentUser)return;
  try{
   setDbStatus(false,'conectando…');
   const [pr,or,ir,rr,mr]=await Promise.all([
@@ -244,8 +341,9 @@ async function save(){renderAll()}
 function money(v){return 'S/ '+Number(v||0).toFixed(2)}
 function available(p){return Math.max(0,p.stock-p.display-p.reserved)}
 function orderCode(){return 'FIL-'+new Date().getFullYear()+'-'+String(db.seq++).padStart(6,'0')}
-function toggleProductForm(){ $('productForm').classList.toggle('hidden') }
+function toggleProductForm(){ if(!canManageInventory())return alert('Solo Supervisor o Administrador puede modificar el inventario.'); $('productForm').classList.toggle('hidden') }
 async function saveProduct(){
+ if(!canManageInventory())return alert('No tienes permiso para modificar inventario.');
  let sku=$('pSku').value.trim(),name=$('pName').value.trim(); if(!sku||!name)return alert('Completa SKU y nombre.');
  let p={id:editingId||null,sku,name,cat:$('pCat').value||'General',list:+$('pList').value||0,neg:+$('pNeg').value||0,min:+$('pMin').value||0,cost:+$('pCost').value||0,stock:+$('pStock').value||0,display:+$('pDisplay').value||0,reserved:0,preorder:0,transit:0};
  try{
@@ -267,7 +365,7 @@ async function saveProduct(){
    await loadFromSupabase();
  }catch(e){alert('Error guardando producto: '+e.message)}
 }
-function editProduct(id){let p=db.products.find(x=>x.id===id);editingId=id;Object.entries({pSku:p.sku,pName:p.name,pCat:p.cat,pList:p.list,pNeg:p.neg,pMin:p.min,pCost:p.cost,pStock:p.stock,pDisplay:p.display}).forEach(([k,v])=>$(k).value=v);$('productForm').classList.remove('hidden')}
+function editProduct(id){if(!canManageInventory())return alert('Solo Supervisor o Administrador puede editar productos.');let p=db.products.find(x=>x.id===id);editingId=id;Object.entries({pSku:p.sku,pName:p.name,pCat:p.cat,pList:p.list,pNeg:p.neg,pMin:p.min,pCost:p.cost,pStock:p.stock,pDisplay:p.display}).forEach(([k,v])=>$(k).value=v);$('productForm').classList.remove('hidden')}
 
 async function recordMovement({product,type,qty,before,after,reference='',detail=''}){
  try{
@@ -280,7 +378,11 @@ async function recordMovement({product,type,qty,before,after,reference='',detail
    stock_before:Number(before||0),
    stock_after:Number(after||0),
    reference:reference||'',
-   detail:detail||''
+   detail:detail||'',
+   actor_user_id:currentUser?.id||null,
+   actor_email:currentUser?.email||'',
+   actor_name:actorName(),
+   actor_role:actorRole()
   };
   const {error}=await supabaseClient.from('inventory_movements').insert(row);
   if(error) throw error;
@@ -307,12 +409,14 @@ function renderMovements(){
   <td>${Number(m.quantity||0)}</td>
   <td>${Number(m.stock_before||0)}</td>
   <td>${Number(m.stock_after||0)}</td>
+  <td>${m.actor_name||m.actor_email||'-'}${m.actor_email&&m.actor_name!==m.actor_email?`<div class="small">${m.actor_email}</div>`:''}</td>
+  <td>${ROLE_LABELS[m.actor_role]||m.actor_role||'-'}</td>
   <td>${m.reference||'-'}</td>
   <td>${m.detail||'-'}</td>
- </tr>`).join(''):'<tr><td colspan="9" class="small">No hay movimientos registrados.</td></tr>';
+ </tr>`).join(''):'<tr><td colspan="11" class="small">No hay movimientos registrados.</td></tr>';
 }
 
-function renderInventory(){let q=($('stockSearch').value||'').toLowerCase();$('inventoryRows').innerHTML=db.products.filter(p=>(p.sku+' '+p.name).toLowerCase().includes(q)).map(p=>`<tr><td>${p.sku}</td><td><b>${p.name}</b><div class="small">${p.cat}</div></td><td>${money(p.list)}</td><td>${money(p.neg)}</td><td>${money(p.min)}</td><td>${money(p.cost)}</td><td>${p.stock}</td><td><b>${available(p)}</b></td><td>${p.display}</td><td>${p.reserved}</td><td>${p.preorder}</td><td>${p.transit}</td><td><button class="btn secondary" onclick="editProduct(${p.id})">Editar</button></td></tr>`).join('')}
+function renderInventory(){let q=($('stockSearch').value||'').toLowerCase();$('inventoryRows').innerHTML=db.products.filter(p=>(p.sku+' '+p.name).toLowerCase().includes(q)).map(p=>`<tr><td>${p.sku}</td><td><b>${p.name}</b><div class="small">${p.cat}</div></td><td>${money(p.list)}</td><td>${money(p.neg)}</td><td>${money(p.min)}</td><td>${money(p.cost)}</td><td>${p.stock}</td><td><b>${available(p)}</b></td><td>${p.display}</td><td>${p.reserved}</td><td>${p.preorder}</td><td>${p.transit}</td><td>${canManageInventory()?`<button class="btn secondary" onclick="editProduct(${p.id})">Editar</button>`:'<span class="small">Solo lectura</span>'}</td></tr>`).join('')}
 function renderProductSearch(){let q=($('sSearch').value||'').toLowerCase();let rows=db.products.filter(p=>available(p)>0&&(p.sku+' '+p.name).toLowerCase().includes(q)).slice(0,8);$('sSearchResults').innerHTML=rows.length?rows.map(p=>`<button class="btn secondary" style="margin:4px" onclick="addCart(${p.id})">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</button>`).join(''):'Sin coincidencias.'}
 function addCart(id){let p=db.products.find(x=>x.id===id),c=cart.find(x=>x.id===id);if(c){if(c.qty<available(p))c.qty++}else cart.push({id:p.id,sku:p.sku,name:p.name,price:p.list,qty:1});renderCart()}
 function renderCart(){let total=0;$('sCartRows').innerHTML=cart.map(c=>{let p=db.products.find(x=>x.id===c.id),sub=c.price*c.qty;total+=sub;return `<tr><td>${c.sku}<br><b>${c.name}</b></td><td>${available(p)}</td><td>${money(p.list)}</td><td><input type="number" min="1" max="${available(p)}" value="${c.qty}" style="width:80px" onchange="setCartQty(${c.id},this.value)"></td><td><input type="number" value="${c.price}" style="width:95px" onchange="setCartPrice(${c.id},this.value)"></td><td>${money(sub)}</td><td><button class="btn danger" onclick="removeCart(${c.id})">×</button></td></tr>`}).join('');$('sTotal').value=money(total);calcPay()}
@@ -488,10 +592,11 @@ function loadShipLabel(id){
 }
 function printTicket(){document.body.classList.add('print-ticket');window.print();setTimeout(()=>document.body.classList.remove('print-ticket'),300)}
 function printLabel(){document.body.classList.add('print-label');window.print();setTimeout(()=>document.body.classList.remove('print-label'),300)}
-function resetDemo(){location.reload()}}
+function resetDemo(){location.reload()}
 function renderAll(){renderInventory();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
-syncDeliveryFields();renderCart();loadFromSupabase();
+syncDeliveryFields();renderCart();initAuth();
+$('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 </script>
 </body>
 </html>
