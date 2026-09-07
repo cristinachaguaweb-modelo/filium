@@ -695,6 +695,7 @@ async function createSale(){
 }
 
 
+const LEGACY_PRINT_SETTINGS_KEY='filium_print_settings_v1';
 let printSettings={
  businessName:'FILIUM',
  businessPhone:'',
@@ -725,6 +726,39 @@ async function loadPrintSettings(){
     businessAddress:data.business_address||'',
     logoData:data.logo_data||''
    };
+  }else{
+   // Recuperar configuración antigua guardada en este navegador.
+   try{
+    const legacy=JSON.parse(localStorage.getItem(LEGACY_PRINT_SETTINGS_KEY)||'null');
+    if(legacy){
+     printSettings={
+      businessName:legacy.businessName||'FILIUM',
+      businessPhone:legacy.businessPhone||'',
+      businessRuc:legacy.businessRuc||'',
+      businessAddress:legacy.businessAddress||'',
+      logoData:legacy.logoData||''
+     };
+
+     // Si es supervisor o administrador, migrar automáticamente a Supabase.
+     if(canEditPrintSettings()){
+      const {error:migrationError}=await supabaseClient
+       .from('company_settings')
+       .upsert({
+        id:1,
+        business_name:printSettings.businessName,
+        business_phone:printSettings.businessPhone,
+        business_ruc:printSettings.businessRuc,
+        business_address:printSettings.businessAddress,
+        logo_data:printSettings.logoData,
+        updated_by:currentUser?.id||null,
+        updated_at:new Date().toISOString()
+       },{onConflict:'id'});
+      if(migrationError)console.error('No se pudo migrar la configuración antigua:',migrationError);
+     }
+    }
+   }catch(legacyError){
+    console.error('Error leyendo configuración antigua:',legacyError);
+   }
   }
 
   if($('cfgBusinessName'))$('cfgBusinessName').value=printSettings.businessName||'FILIUM';
@@ -741,10 +775,27 @@ async function loadPrintSettings(){
   renderConfigTicketPreview();
  }catch(e){
   console.error('Error cargando configuración de impresión:',e);
+
+  // Último fallback: intentar recuperar localStorage aunque Supabase falle.
+  try{
+   const legacy=JSON.parse(localStorage.getItem(LEGACY_PRINT_SETTINGS_KEY)||'null');
+   if(legacy){
+    printSettings={...printSettings,...legacy};
+    if($('cfgBusinessName'))$('cfgBusinessName').value=printSettings.businessName||'FILIUM';
+    if($('cfgBusinessPhone'))$('cfgBusinessPhone').value=printSettings.businessPhone||'';
+    if($('cfgBusinessRuc'))$('cfgBusinessRuc').value=printSettings.businessRuc||'';
+    if($('cfgBusinessAddress'))$('cfgBusinessAddress').value=printSettings.businessAddress||'';
+    if($('cfgLogoPreview') && printSettings.logoData){
+     $('cfgLogoPreview').src=printSettings.logoData;
+     $('cfgLogoPreview').style.display='block';
+    }
+    renderConfigTicketPreview();
+   }
+  }catch(_){}
+
   if($('cfgSavedMsg'))$('cfgSavedMsg').textContent='No se pudo cargar la configuración desde Supabase.';
  }
 }
-
 function applyPrintSettingsPermissions(){
  const editable=canEditPrintSettings();
  ['cfgBusinessName','cfgBusinessPhone','cfgBusinessRuc','cfgBusinessAddress','cfgLogoFile']
@@ -804,6 +855,8 @@ async function savePrintSettings(){
    .upsert(row,{onConflict:'id'});
 
   if(error)throw error;
+
+  try{localStorage.setItem(LEGACY_PRINT_SETTINGS_KEY,JSON.stringify(printSettings))}catch(_){}
 
   $('cfgSavedMsg').textContent='Configuración guardada en Supabase.';
   renderConfigTicketPreview();
