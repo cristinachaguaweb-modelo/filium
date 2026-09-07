@@ -48,6 +48,21 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 @media(max-width:980px){.logistics-layout{grid-template-columns:1fr}.ship-preview-panel{position:static}}
 
 @media(max-width:800px){.grid,.grid3,.kpis{grid-template-columns:1fr}main{padding:10px}table{min-width:850px}}
+
+.ticket{width:58mm;background:#fff;color:#000;padding:1.2mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.28}
+.ticket .ticket-logo{display:block;width:54mm;max-width:54mm;height:auto;max-height:28mm;object-fit:contain;margin:0 auto 1.5mm}
+.ticket .ticket-business{text-align:center}
+.ticket .ticket-business-name{font-size:17px;font-weight:900;line-height:1.1}
+.ticket .ticket-title{font-size:15px;font-weight:900;text-align:center;margin:1.5mm 0}
+.ticket .ticket-order{font-size:14px;font-weight:900;text-align:center}
+.ticket .ticket-items-head,.ticket .ticket-item-row{display:grid;grid-template-columns:1fr 17mm 18mm;gap:1mm;align-items:start}
+.ticket .ticket-items-head{font-weight:800;border-bottom:1px solid #000;padding-bottom:1mm;margin-bottom:1mm}
+.ticket .ticket-product{font-weight:800;margin-top:1.5mm}
+.ticket .ticket-total{font-size:15px;font-weight:900}
+.ticket .ticket-center{text-align:center}
+.ticket .ticket-note{font-size:10px}
+.ticket hr{border:0;border-top:1px dashed #000;margin:1.5mm 0}
+
 @media print{
  body *{visibility:hidden}
  body.print-ticket #ticket58,body.print-ticket #ticket58 *{visibility:visible}
@@ -90,6 +105,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
  <button class="tab" data-tab="preventa">Preventa / Reserva</button>
  <button class="tab" data-tab="pedidos">Pedidos</button>
  <button class="tab" data-tab="envios">Motor logístico</button>
+    <button class="tab" data-tab="configuracion">Configuración</button>
 </nav>
 
 <main>
@@ -268,6 +284,38 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   </div>
  </div>
 </section>
+
+<section id="configuracion" class="hidden">
+ <div class="panel">
+  <h2>Configuración de impresión</h2>
+  <div class="small">Estos datos aparecerán en el ticket de venta de 58 mm.</div>
+  <div class="grid3" style="margin-top:14px">
+   <div><label>Nombre de la empresa</label><input id="cfgBusinessName" placeholder="FILIUM"></div>
+   <div><label>Teléfono / celular</label><input id="cfgBusinessPhone" placeholder="999 999 999"></div>
+   <div><label>RUC <span class="small">(opcional)</span></label><input id="cfgBusinessRuc" placeholder="RUC"></div>
+   <div style="grid-column:1/-1"><label>Dirección</label><input id="cfgBusinessAddress" placeholder="Dirección comercial"></div>
+   <div style="grid-column:1/-1">
+    <label>Logo para el ticket</label>
+    <input id="cfgLogoFile" type="file" accept="image/*" onchange="previewConfigLogo(this)">
+    <div class="small" style="margin-top:5px">Se recomienda una imagen PNG o JPG con fondo claro.</div>
+   </div>
+  </div>
+  <div style="margin-top:14px">
+   <img id="cfgLogoPreview" alt="Logo" style="display:none;max-width:240px;max-height:120px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff">
+  </div>
+  <div class="actions" style="margin-top:14px">
+   <button class="btn" onclick="savePrintSettings()">Guardar configuración</button>
+   <button class="btn secondary" onclick="clearPrintLogo()">Quitar logo</button>
+  </div>
+  <div id="cfgSavedMsg" class="small" style="margin-top:10px"></div>
+ </div>
+
+ <div class="panel">
+  <h3>Vista previa del ticket</h3>
+  <div id="configTicketPreview" class="ticket"></div>
+ </div>
+</section>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -642,7 +690,109 @@ async function createSale(){
    alert('Error creando pedido: '+(e.message||e));
  }
 }
-function buildTicket(o){$('ticket58').innerHTML=`<div class="logo">FILIUM</div><div style="text-align:center">TICKET DE VENTA</div><hr><div><b>${o.code}</b></div><div>${new Date(o.date).toLocaleString('es-PE')}</div><div>Cliente: ${o.client}</div><hr>${o.items.map(i=>`<div><b>${i.name}</b><br>${i.qty} × ${money(i.price)} = ${money(i.qty*i.price)}</div>`).join('')}<hr><div><b>TOTAL: ${money(o.total)}</b></div><div>Pago: ${o.payment}</div>${o.balance>0?`<div><b>Saldo pendiente: ${money(o.balance)}</b></div>`:''}<hr><div style="text-align:center">Gracias por su compra</div>`}
+
+const PRINT_SETTINGS_KEY='filium_print_settings_v1';
+let printSettings={
+ businessName:'FILIUM',
+ businessPhone:'',
+ businessRuc:'',
+ businessAddress:'',
+ logoData:''
+};
+function loadPrintSettings(){
+ try{
+  const saved=JSON.parse(localStorage.getItem(PRINT_SETTINGS_KEY)||'null');
+  if(saved)printSettings={...printSettings,...saved};
+ }catch(e){console.error(e)}
+ if($('cfgBusinessName'))$('cfgBusinessName').value=printSettings.businessName||'FILIUM';
+ if($('cfgBusinessPhone'))$('cfgBusinessPhone').value=printSettings.businessPhone||'';
+ if($('cfgBusinessRuc'))$('cfgBusinessRuc').value=printSettings.businessRuc||'';
+ if($('cfgBusinessAddress'))$('cfgBusinessAddress').value=printSettings.businessAddress||'';
+ if($('cfgLogoPreview')){
+  $('cfgLogoPreview').style.display=printSettings.logoData?'block':'none';
+  if(printSettings.logoData)$('cfgLogoPreview').src=printSettings.logoData;
+ }
+ renderConfigTicketPreview();
+}
+function previewConfigLogo(input){
+ const file=input.files?.[0]; if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>{printSettings.logoData=reader.result;$('cfgLogoPreview').src=reader.result;$('cfgLogoPreview').style.display='block';renderConfigTicketPreview()};
+ reader.readAsDataURL(file);
+}
+function savePrintSettings(){
+ printSettings.businessName=$('cfgBusinessName').value.trim()||'FILIUM';
+ printSettings.businessPhone=$('cfgBusinessPhone').value.trim();
+ printSettings.businessRuc=$('cfgBusinessRuc').value.trim();
+ printSettings.businessAddress=$('cfgBusinessAddress').value.trim();
+ localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(printSettings));
+ $('cfgSavedMsg').textContent='Configuración guardada correctamente.';
+ renderConfigTicketPreview();
+ if(db.orders.length)buildTicket(db.orders[db.orders.length-1]);
+ setTimeout(()=>{$('cfgSavedMsg').textContent=''},2500);
+}
+function clearPrintLogo(){
+ printSettings.logoData='';
+ localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(printSettings));
+ $('cfgLogoPreview').removeAttribute('src');
+ $('cfgLogoPreview').style.display='none';
+ $('cfgLogoFile').value='';
+ renderConfigTicketPreview();
+}
+function ticketHeaderHtml(){
+ return `<div class="ticket-business">
+  ${printSettings.logoData?`<img class="ticket-logo" src="${printSettings.logoData}" alt="Logo">`:''}
+  <div class="ticket-business-name">${printSettings.businessName||'FILIUM'}</div>
+  ${printSettings.businessRuc?`<div>RUC: ${printSettings.businessRuc}</div>`:''}
+  ${printSettings.businessPhone?`<div>Tel: ${printSettings.businessPhone}</div>`:''}
+  ${printSettings.businessAddress?`<div>${printSettings.businessAddress}</div>`:''}
+ </div>`;
+}
+function renderConfigTicketPreview(){
+ if(!$('configTicketPreview'))return;
+ $('configTicketPreview').innerHTML=`${ticketHeaderHtml()}<hr>
+ <div class="ticket-title">ORDEN DE PEDIDO</div>
+ <div class="ticket-order">FIL-2026-100529</div>
+ <div>Cliente: Cliente de ejemplo</div>
+ <div>DNI: 00000000</div>
+ <div>Celular: 999 999 999</div><hr>
+ <div class="ticket-items-head"><span>Cant.</span><span>P.Unit.</span><span>Importe</span></div>
+ <div class="ticket-product">Producto de ejemplo</div>
+ <div class="ticket-item-row"><span>1</span><span>S/ 100.00</span><span>S/ 100.00</span></div><hr>
+ <div class="ticket-total">TOTAL: S/ 100.00</div>
+ <div>Medio de pago: Efectivo</div>
+ <div>Importe: S/ 100.00</div>
+ <div>Vuelto: S/ 0.00</div><hr>
+ <div class="ticket-center">¡Gracias por tu compra!</div>`;
+}
+
+function buildTicket(o){
+ const change=Math.max(0,Number(o.received||0)-Number(o.total||0));
+ const pending=Math.max(0,Number(o.balance||0));
+ $('ticket58').innerHTML=`${ticketHeaderHtml()}<hr>
+ <div class="ticket-title">ORDEN DE PEDIDO</div>
+ <div class="ticket-order">${o.code}</div>
+ <div>Cliente: ${o.client||'Cliente general'}</div>
+ <div>DNI: ${o.dni||'-'}</div>
+ <div>Celular: ${o.phone||'-'}</div><hr>
+ <div class="ticket-items-head"><span>Cant.</span><span>P.Unit.</span><span>Importe</span></div>
+ ${(o.items||[]).map(i=>`
+   <div class="ticket-product">${i.name||i.product_name||''}</div>
+   <div class="ticket-item-row">
+    <span>${i.qty||i.quantity||1}</span>
+    <span>${money(i.price||i.unit_price||0)}</span>
+    <span>${money((i.qty||i.quantity||1)*(i.price||i.unit_price||0))}</span>
+   </div>
+ `).join('')}
+ <hr>
+ <div class="ticket-total">TOTAL: ${money(o.total)}</div>
+ <div>Medio de pago: ${o.payment||'-'}</div>
+ <div>Importe: ${money(o.received)}</div>
+ ${pending>0?`<div style="font-weight:900;margin-top:1mm">PAGO PENDIENTE: ${money(pending)}</div>`:`<div>Vuelto: ${money(change)}</div>`}
+ <hr>
+ <div class="ticket-center">¡Gracias por tu compra!</div>
+ <div class="ticket-note ticket-center" style="margin-top:2mm">Guarde este ticket como constancia de su compra.</div>`;
+}
 async function createPreorder(){
  let type=$('prType').value,p=db.products.find(x=>x.id==$('prProduct').value),qty=+$('prQty').value||1;if(!p)return;
  if(type==='reserva'&&qty>available(p))return alert('No hay stock disponible suficiente para reservar.');
@@ -794,7 +944,7 @@ function printLabel(){document.body.classList.add('print-label');window.print();
 function resetDemo(){location.reload()}
 function renderAll(){renderInventory();renderReceiptProducts();renderMovements();renderPreorders();renderOrders();renderLogistics();setTimeout(autoLoadPendingShipLabel,0);renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
-syncDeliveryFields();renderCart();initAuth();
+syncDeliveryFields();renderCart();loadPrintSettings();initAuth();
 $('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 </script>
 </body>
