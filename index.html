@@ -73,6 +73,16 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 .log-detail .log-section{background:#fff}
 .log-detail-close{display:flex;justify-content:flex-end;margin-top:10px}
 
+
+.log-detail-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
+.log-detail-main{min-width:0}
+.log-detail-ticket{position:sticky;top:12px}
+.log-detail-ticket .ship-label{margin:0 auto}
+@media(max-width:980px){
+ .log-detail-layout{grid-template-columns:1fr}
+ .log-detail-ticket{position:static}
+}
+
 @media(max-width:800px){.grid,.grid3,.kpis{grid-template-columns:1fr}main{padding:10px}table{min-width:850px}}
 
 .ticket{width:58mm;background:#fff;color:#000;padding:1.2mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.28}
@@ -1171,102 +1181,107 @@ function renderLogistics(){
 
   if(!expanded)return summary+'</div>';
 
+  const sideTicket = isPickup ? '' : `
+   <aside class="log-detail-ticket">
+    <div class="log-section">
+     <h4>Ticket de envío</h4>
+     <div id="shipLabelInline_${o.id}" class="ship-label">
+      <div class="destination">${o.destination||'DESTINO'}</div>
+      <div class="order-code">${o.code}</div>
+      <div class="small">${o.prepReady?'Pulsa “Generar / actualizar ticket”':'Marca el pedido como listo para generar el ticket.'}</div>
+     </div>
+     <div class="actions" style="margin-top:10px">
+      <button class="btn secondary" onclick="loadShipLabel(${o.id})" ${o.prepReady?'':'disabled'}>
+       ${o.prepReady?'Generar / actualizar':'Disponible al marcar listo'}
+      </button>
+      <button class="btn secondary" onclick="printLabel()" ${o.prepReady?'':'disabled'}>Imprimir 62 × 100 mm</button>
+     </div>
+    </div>
+   </aside>`;
+
   const detail=`<div class="log-detail">
-   <div class="log-section">
-    <h4>1. Datos coordinados</h4>
-    <div class="grid3">
-     <div><label>Cliente</label><input value="${o.client||''}" readonly></div>
-     <div><label>DNI / RUC</label><input value="${o.dni||''}" readonly></div>
-     <div><label>Celular</label><input value="${o.phone||''}" readonly></div>
-     ${isPickup?'':`
-     <div><label>Destino</label><input id="shipDest_${o.id}" value="${o.destination||''}"></div>
-     <div><label>Dirección / Agencia</label><input id="shipAddr_${o.id}" value="${o.address||''}"></div>
-     <div><label>Operador</label><input id="shipCarrier_${o.id}" value="${o.carrier||''}"></div>`}
-    </div>
-    ${isPickup?'':`<div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button></div>`}
-   </div>
+   <div class="log-detail-layout">
+    <div class="log-detail-main">
 
-   ${isPickup?'':`<div class="log-section">
-    <h4>2. Preparación</h4>
-    <div class="grid3">
-     <div><label>Tipo de empaque</label><select onchange="updateOrderField(${o.id},'packageType',this.value)">
-      <option ${o.packageType==='Caja'?'selected':''}>Caja</option>
-      <option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option>
-      <option ${o.packageType==='Sobre'?'selected':''}>Sobre</option>
-      <option ${o.packageType==='Otro'?'selected':''}>Otro</option>
-     </select></div>
-     <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
-     <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
-     <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
-     <div><label>Preparación</label><button class="btn ${o.prepReady?'secondary':''}" onclick="${o.prepReady?`loadShipLabel(${o.id})`:`markPreparationReady(${o.id})`}">${o.prepReady?'✓ Listo · Ver ticket':'Marcar listo'}</button></div>
-    </div>
-   </div>
+     <div class="log-section">
+      <h4>1. Datos coordinados</h4>
+      <div class="grid3">
+       <div><label>Cliente</label><input value="${o.client||''}" readonly></div>
+       <div><label>DNI / RUC</label><input value="${o.dni||''}" readonly></div>
+       <div><label>Celular</label><input value="${o.phone||''}" readonly></div>
+       ${isPickup?'':`
+       <div><label>Destino</label><input id="shipDest_${o.id}" value="${o.destination||''}"></div>
+       <div><label>Dirección / Agencia</label><input id="shipAddr_${o.id}" value="${o.address||''}"></div>
+       <div><label>Operador</label><input id="shipCarrier_${o.id}" value="${o.carrier||''}"></div>`}
+      </div>
+      ${isPickup?'':`<div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button></div>`}
+     </div>
 
-   <div class="log-section">
-    <h4>3. Despacho</h4>
-    <div class="grid3">
-     <div><label>N.º guía / Tracking</label><input id="shipTracking_${o.id}" value="${o.tracking||''}"></div>
-     <div><label>Clave de recojo</label><input id="shipPickup_${o.id}" value="${o.pickupKey||''}"></div>
-     <div><label>Costo de envío</label><input type="number" step="0.01" value="${o.shippingCost||0}" onchange="updateOrderField(${o.id},'shippingCost',this.value)"></div>
-     <div><label>Quién paga</label><select onchange="updateOrderField(${o.id},'shippingPaidBy',this.value)">
-      <option ${o.shippingPaidBy==='Cliente'?'selected':''}>Cliente</option>
-      <option ${o.shippingPaidBy==='FILIUM'?'selected':''}>FILIUM</option>
-     </select></div>
-     <div><label>Estado pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentStatus',this.value)">
-      <option ${o.shippingPaymentStatus==='Pendiente'?'selected':''}>Pendiente</option>
-      <option ${o.shippingPaymentStatus==='Pagado'?'selected':''}>Pagado</option>
-     </select></div>
-     <div><label>Método pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentMethod',this.value)">
-      <option value="">Seleccionar</option>
-      <option ${o.shippingPaymentMethod==='Efectivo'?'selected':''}>Efectivo</option>
-      <option ${o.shippingPaymentMethod==='Yape'?'selected':''}>Yape</option>
-      <option ${o.shippingPaymentMethod==='Plin'?'selected':''}>Plin</option>
-      <option ${o.shippingPaymentMethod==='Transferencia'?'selected':''}>Transferencia</option>
-     </select></div>
-    </div>
-    <div class="actions" style="margin-top:10px">
-     <button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button>
-     <button class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button>
-     ${String(o.carrier||'').toLowerCase().includes('shalom')?`<button class="btn secondary" onclick="openShalomTracking()">Consultar en Shalom</button>`:''}
-    </div>
-   </div>`}
+     ${isPickup?'':`<div class="log-section">
+      <h4>2. Preparación</h4>
+      <div class="grid3">
+       <div><label>Tipo de empaque</label><select onchange="updateOrderField(${o.id},'packageType',this.value)">
+        <option ${o.packageType==='Caja'?'selected':''}>Caja</option>
+        <option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option>
+        <option ${o.packageType==='Sobre'?'selected':''}>Sobre</option>
+        <option ${o.packageType==='Otro'?'selected':''}>Otro</option>
+       </select></div>
+       <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
+       <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
+       <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
+       <div><label>Preparación</label><button class="btn ${o.prepReady?'secondary':''}" onclick="${o.prepReady?`loadShipLabel(${o.id})`:`markPreparationReady(${o.id})`}">${o.prepReady?'✓ Listo · Ver ticket':'Marcar listo'}</button></div>
+      </div>
+     </div>
 
-   <div class="log-section">
-    <h4>${isPickup?'2':'4'}. Seguimiento</h4>
-    <div class="grid3">
-     <div><label>Estado logístico</label><select onchange="setLogStatus(${o.id},this.value)">
-      <option ${o.status==='Por alistar'?'selected':''}>Por alistar</option>
-      <option ${o.status==='En tránsito'?'selected':''}>En tránsito</option>
-      <option ${o.status==='En destino'?'selected':''}>En destino</option>
-      <option ${o.status==='Entregado'?'selected':''}>Entregado</option>
-     </select></div>
-     <div><label>Pago de compra</label><div style="padding-top:8px">${o.balance>0?`<button class="btn" onclick="collectBalance(${o.id})">Cobrar saldo ${money(o.balance)}</button>`:'<span class="badge ok">Compra pagada</span>'}</div></div>
-     <div><label>Entrega</label><div style="padding-top:8px">${o.deliveredAt?`<span class="badge ok">Entregado ${new Date(o.deliveredAt).toLocaleString('es-PE')}</span>`:'<span class="small">Pendiente</span>'}</div></div>
-    </div>
-   </div>
-
-   ${isPickup?'':`<div class="log-section">
-    <h4>5. Ticket de envío</h4>
-    <div class="log-ticket-wrap">
-     <div>
-      <div class="small">El ticket se habilita cuando el pedido está listo.</div>
+     <div class="log-section">
+      <h4>3. Despacho</h4>
+      <div class="grid3">
+       <div><label>N.º guía / Tracking</label><input id="shipTracking_${o.id}" value="${o.tracking||''}"></div>
+       <div><label>Clave de recojo</label><input id="shipPickup_${o.id}" value="${o.pickupKey||''}"></div>
+       <div><label>Costo de envío</label><input type="number" step="0.01" value="${o.shippingCost||0}" onchange="updateOrderField(${o.id},'shippingCost',this.value)"></div>
+       <div><label>Quién paga</label><select onchange="updateOrderField(${o.id},'shippingPaidBy',this.value)">
+        <option ${o.shippingPaidBy==='Cliente'?'selected':''}>Cliente</option>
+        <option ${o.shippingPaidBy==='FILIUM'?'selected':''}>FILIUM</option>
+       </select></div>
+       <div><label>Estado pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentStatus',this.value)">
+        <option ${o.shippingPaymentStatus==='Pendiente'?'selected':''}>Pendiente</option>
+        <option ${o.shippingPaymentStatus==='Pagado'?'selected':''}>Pagado</option>
+       </select></div>
+       <div><label>Método pago flete</label><select onchange="updateOrderField(${o.id},'shippingPaymentMethod',this.value)">
+        <option value="">Seleccionar</option>
+        <option ${o.shippingPaymentMethod==='Efectivo'?'selected':''}>Efectivo</option>
+        <option ${o.shippingPaymentMethod==='Yape'?'selected':''}>Yape</option>
+        <option ${o.shippingPaymentMethod==='Plin'?'selected':''}>Plin</option>
+        <option ${o.shippingPaymentMethod==='Transferencia'?'selected':''}>Transferencia</option>
+       </select></div>
+      </div>
       <div class="actions" style="margin-top:10px">
-       <button class="btn secondary" onclick="loadShipLabel(${o.id})" ${o.prepReady?'':'disabled'}>${o.prepReady?'Generar / actualizar ticket':'Disponible al marcar listo'}</button>
-       <button class="btn secondary" onclick="printLabel()" ${o.prepReady?'':'disabled'}>Imprimir 62 × 100 mm</button>
+       <button class="btn secondary" onclick="saveShippingData(${o.id})">Guardar datos de envío</button>
+       <button class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button>
+       ${String(o.carrier||'').toLowerCase().includes('shalom')?`<button class="btn secondary" onclick="openShalomTracking()">Consultar en Shalom</button>`:''}
+      </div>
+     </div>`}
+
+     <div class="log-section">
+      <h4>${isPickup?'2':'4'}. Seguimiento</h4>
+      <div class="grid3">
+       <div><label>Estado logístico</label><select onchange="setLogStatus(${o.id},this.value)">
+        <option ${o.status==='Por alistar'?'selected':''}>Por alistar</option>
+        <option ${o.status==='En tránsito'?'selected':''}>En tránsito</option>
+        <option ${o.status==='En destino'?'selected':''}>En destino</option>
+        <option ${o.status==='Entregado'?'selected':''}>Entregado</option>
+       </select></div>
+       <div><label>Pago de compra</label><div style="padding-top:8px">${o.balance>0?`<button class="btn" onclick="collectBalance(${o.id})">Cobrar saldo ${money(o.balance)}</button>`:'<span class="badge ok">Compra pagada</span>'}</div></div>
+       <div><label>Entrega</label><div style="padding-top:8px">${o.deliveredAt?`<span class="badge ok">Entregado ${new Date(o.deliveredAt).toLocaleString('es-PE')}</span>`:'<span class="small">Pendiente</span>'}</div></div>
       </div>
      </div>
-     <div class="log-ticket-side">
-      <div id="shipLabelInline_${o.id}" class="ship-label">
-       <div class="destination">${o.destination||'DESTINO'}</div>
-       <div class="order-code">${o.code}</div>
-       <div class="small">${o.prepReady?'Pulsa “Generar / actualizar ticket”':'Marca el pedido como listo para generar el ticket.'}</div>
-      </div>
+
+     <div class="log-detail-close">
+      <button class="btn secondary" onclick="toggleLogOrder(${o.id})">Cerrar detalle</button>
      </div>
     </div>
-   </div>`}
 
-   <div class="log-detail-close">
-    <button class="btn secondary" onclick="toggleLogOrder(${o.id})">Cerrar detalle</button>
+    ${sideTicket}
    </div>
   </div></div>`;
 
