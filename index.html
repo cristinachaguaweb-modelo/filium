@@ -312,10 +312,10 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   }
 
   body.print-ticket *{display:none!important}
-  body.print-ticket #ticket58,
-  body.print-ticket #ticket58 *{display:block!important}
+  body.print-ticket #printTicketArea,
+  body.print-ticket #printTicketArea *{display:block!important}
 
-  body.print-ticket #ticket58{
+  body.print-ticket #printTicketArea{
     position:absolute!important;
     left:0!important;
     top:0!important;
@@ -325,17 +325,32 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
     max-height:none!important;
     overflow:visible!important;
     margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+
+  body.print-ticket #printTicketArea .ticket{
+    width:62mm!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    margin:0!important;
     padding:2mm!important;
     background:#fff!important;
     box-sizing:border-box!important;
+    border:0!important;
     page-break-after:avoid!important;
+    page-break-inside:avoid!important;
     break-after:avoid!important;
+    break-inside:avoid!important;
   }
 }
 </style>
 </head>
 <body>
 <div id="printLabelArea" aria-hidden="true"></div>
+<div id="printTicketArea" aria-hidden="true"></div>
 
 <div id="authScreen" class="auth-screen">
  <div class="auth-card">
@@ -2137,12 +2152,54 @@ async function processShippingPayment(id){
  try{const {error}=await supabaseClient.from('orders').update(orderToPatch(o)).eq('id',id);if(error)throw error;await loadFromSupabase()}catch(e){alert('Error: '+e.message)}
 }
 async function setLogStatus(id,status){
- let o=db.orders.find(x=>x.id===id); if(!o)return;
- if(status==='En tránsito' && o.fulfill!=='recojo_tienda' && !o.prepReady){alert('Primero marca la preparación como LISTA.');return}
- if(status==='Entregado' && o.balance>0){alert('El pedido tiene saldo pendiente. Cóbralo antes de marcarlo como entregado.');return}
- o.status=status;if(status==='Entregado')o.deliveredAt=new Date().toISOString();
- try{const {error}=await supabaseClient.from('orders').update(orderToPatch(o)).eq('id',id);if(error)throw error;await loadFromSupabase()}catch(e){alert('Error: '+e.message)}
+ const o=db.orders.find(x=>x.id===id);
+ if(!o)return;
+
+ if(status==='En tránsito' && o.fulfill!=='recojo_tienda' && !o.prepReady){
+  alert('Primero marca la preparación como LISTA.');
+  renderLogistics();
+  return;
+ }
+
+ if(status==='Entregado' && Number(o.balance||0)>0){
+  alert('No se puede marcar como entregado porque queda un saldo pendiente de '+money(o.balance)+'. Cobra el saldo primero.');
+  renderLogistics();
+  return;
+ }
+
+ try{
+  const {error}=await supabaseClient.rpc('set_filium_logistic_status',{
+   p_order_id:id,
+   p_status:status
+  });
+  if(error)throw error;
+
+  await loadFromSupabase();
+
+  if(status==='Entregado'){
+   alert('Pedido marcado como ENTREGADO.');
+  }
+ }catch(e){
+  console.error(e);
+  alert('No se pudo cambiar el estado: '+(e.message||e));
+  await loadFromSupabase();
+ }
 }
+async function collectAndDeliver(id){
+ const o=db.orders.find(x=>x.id===id);
+ if(!o)return;
+
+ if(Number(o.balance||0)>0){
+  await collectBalance(id);
+  await loadFromSupabase();
+ }
+
+ const updated=db.orders.find(x=>x.id===id);
+ if(updated && Number(updated.balance||0)<=0){
+  await setLogStatus(id,'Entregado');
+ }
+}
+
 async function collectBalance(id){
  let o=db.orders.find(x=>x.id===id); if(!o||o.balance<=0)return;
 
@@ -2465,7 +2522,7 @@ function renderLogistics(){
            </div>
            <div class="filium-log-compact-actions">
              ${Number(o.balance||0)>0
-               ? `<button type="button" class="btn" onclick="collectBalance(${o.id})">Cobrar saldo</button>`
+               ? `<button type="button" class="btn" onclick="collectAndDeliver(${o.id})">Cobrar saldo y entregar</button>`
                : ''}
              ${isShalom && ['En tránsito','En destino'].includes(o.status)
                ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Revisar estado en Shalom</button>`
@@ -2567,17 +2624,32 @@ function loadShipLabel(id){
  if(inline)inline.innerHTML=ticketHtml;
 }
 function printTicket(){
- const t=$('ticket58');
- if(t)t.classList.add('print-continuous');
+ const source=$('ticket58');
+ if(!source || !source.textContent.trim() || source.textContent.includes('Sin venta registrada')){
+  alert('Primero genera o selecciona un ticket de pedido.');
+  return;
+ }
+
+ const area=$('printTicketArea');
+ area.innerHTML='';
+ const clone=source.cloneNode(true);
+ clone.removeAttribute('id');
+ clone.classList.add('print-continuous');
+ area.appendChild(clone);
+
  document.body.classList.add('print-ticket');
+
  const cleanup=()=>{
   document.body.classList.remove('print-ticket');
-  if(t)t.classList.remove('print-continuous');
+  area.innerHTML='';
   window.removeEventListener('afterprint',cleanup);
  };
+
  window.addEventListener('afterprint',cleanup);
- setTimeout(()=>window.print(),50);
- setTimeout(()=>{if(document.body.classList.contains('print-ticket'))cleanup()},3000);
+ setTimeout(()=>window.print(),80);
+ setTimeout(()=>{
+  if(document.body.classList.contains('print-ticket'))cleanup();
+ },4000);
 }
 function printLabel(){
  let source=null;
