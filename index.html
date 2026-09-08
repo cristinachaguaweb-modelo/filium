@@ -847,7 +847,7 @@ const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const LS='filium_lite_v2';
 let db={products:[],orders:[],preorders:[],movements:[],accounts:[],cashMovements:[],expenses:[],seq:1};
 let reservationCart=[];
-let cart=[],editingId=null,expandedLogOrderId=null,currentShipLabelOrderId=null,logEditOrderId=null,logEditSection=null;
+let cart=[],editingId=null,expandedLogOrderId=null,currentShipLabelOrderId=null,logEditOrderId=null,logEditSection=null,prepTicketPreviewOrderId=null;
 let currentUser=null;
 let currentProfile=null;
 const ROLE_LABELS={tienda:'Tienda',supervisor:'Supervisor',administrador:'Administrador'};
@@ -2123,6 +2123,7 @@ async function markPreparationReady(id){
 
   logEditOrderId=null; logEditSection=null;
   await loadFromSupabase();
+  showPrepTicketPreview(id);
 
   const updated=db.orders.find(x=>x.id===id);
   if(updated && updated.prepReady){
@@ -2261,6 +2262,30 @@ async function collectBalance(id){
 }
 
 
+
+function showPrepTicketPreview(id){
+  prepTicketPreviewOrderId=id;
+  expandedLogOrderId=id;
+  renderLogistics();
+  setTimeout(()=>loadShipLabel(id),60);
+}
+function closePrepTicketPreview(){
+  prepTicketPreviewOrderId=null;
+  renderLogistics();
+}
+function printPrepTicket(id){
+  currentShipLabelOrderId=id;
+  loadShipLabel(id);
+  setTimeout(()=>{
+    printLabel();
+    prepTicketPreviewOrderId=null;
+    logEditOrderId=null;
+    logEditSection=null;
+    prepTicketPreviewOrderId=null;
+    renderLogistics();
+  },100);
+}
+
 function isEditingLogSection(id,section){
   return logEditOrderId===id && logEditSection===section;
 }
@@ -2307,9 +2332,8 @@ function renderLogistics(){
   const orders=(db.orders||[])
     .map(normalizeOrder)
     .filter(o=>{
-      const text=[
-        o.code,o.client,o.phone,o.destination,o.address,o.carrier,o.tracking,o.pickupKey
-      ].filter(Boolean).join(' ').toLowerCase();
+      const text=[o.code,o.client,o.phone,o.destination,o.address,o.carrier,o.tracking,o.pickupKey]
+        .filter(Boolean).join(' ').toLowerCase();
 
       return (!filterStatus || o.status===filterStatus)
         && (!filterType || o.fulfill===filterType)
@@ -2340,6 +2364,7 @@ function renderLogistics(){
     const editingData=isEditingLogSection(o.id,'data');
     const editingPrep=isEditingLogSection(o.id,'prep');
     const editingDispatch=isEditingLogSection(o.id,'dispatch');
+    const showPrepTicket=!isPickup && o.prepReady && prepTicketPreviewOrderId===o.id;
 
     const prepBadge=o.prepReady
       ? '<span class="badge ok">Preparación lista</span>'
@@ -2381,14 +2406,11 @@ function renderLogistics(){
       return `<div class="filium-log-card" id="logOrder_${o.id}">${summary}</div>`;
     }
 
-    // 1. Datos coordinados
     const dataSection = dataDone && !editingData
       ? `<div class="filium-log-compact">
            <div class="filium-log-compact-main">
              <div class="filium-log-compact-title">Datos coordinados ✓</div>
-             <div class="filium-log-compact-text">
-               ${isPickup?'Recojo en tienda':`${o.carrier||'-'} · ${o.destination||'-'}`}
-             </div>
+             <div class="filium-log-compact-text">${isPickup?'Recojo en tienda':`${o.carrier||'-'} · ${o.destination||'-'}`}</div>
            </div>
            <div class="filium-log-compact-actions">
              ${isPickup?'':`<button type="button" class="btn secondary" onclick="editLogSection(${o.id},'data')">Editar</button>`}
@@ -2412,54 +2434,86 @@ function renderLogistics(){
            </div>`}
          </section>`;
 
-    // 2. Preparación
-    const prepSection = isPickup ? '' : (
-      prepDone && !editingPrep
-      ? `<div class="filium-log-compact">
-           <div class="filium-log-compact-main">
-             <div class="filium-log-compact-title">Preparación lista ✓</div>
-             <div class="filium-log-compact-text">
-               ${o.packages||1} bulto(s)${o.weight?` · ${o.weight}`:''}${o.dimensions?` · ${o.dimensions}`:''}
-             </div>
-           </div>
-           <div class="filium-log-compact-actions">
-             <button type="button" class="btn secondary" onclick="editLogSection(${o.id},'prep')">Editar</button>
-           </div>
-         </div>`
-      : `<section class="filium-log-section">
-           <h4>2. Preparación</h4>
-           <div class="grid3">
-             <div>
-               <label>Tipo de empaque</label>
-               <select onchange="updateOrderField(${o.id},'packageType',this.value)">
-                 <option ${o.packageType==='Caja'?'selected':''}>Caja</option>
-                 <option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option>
-                 <option ${o.packageType==='Sobre'?'selected':''}>Sobre</option>
-                 <option ${o.packageType==='Otro'?'selected':''}>Otro</option>
-               </select>
-             </div>
-             <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
-             <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
-             <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
-           </div>
-           <div class="actions" style="margin-top:10px">
-             <button type="button" class="btn" onclick="markPreparationReady(${o.id})">
-               ${o.prepReady?'Guardar cambios':'Marcar listo'}
-             </button>
-             ${editingPrep?`<button type="button" class="btn secondary" onclick="closeLogSectionEdit()">Cancelar</button>`:''}
-           </div>
-         </section>`
-    );
+    let prepSection='';
+    if(!isPickup){
+      if(showPrepTicket){
+        prepSection=`
+        <section class="filium-log-section">
+          <h4>2. Preparación lista ✓</h4>
+          <div class="grid" style="grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start">
+            <div>
+              <div class="small">
+                ${o.packages||1} bulto(s)
+                ${o.weight?` · ${o.weight}`:''}
+                ${o.dimensions?` · ${o.dimensions}`:''}
+              </div>
+              <div class="actions" style="margin-top:10px">
+                <button type="button" class="btn" onclick="printPrepTicket(${o.id})">Imprimir ticket</button>
+                <button type="button" class="btn secondary" onclick="editLogSection(${o.id},'prep')">Editar preparación</button>
+                <button type="button" class="btn secondary" onclick="closePrepTicketPreview()">Cerrar previsualización</button>
+              </div>
+            </div>
 
-    // 3. Despacho
+            <div>
+              <div class="small" style="margin-bottom:6px"><b>Previsualización</b></div>
+              <div id="shipLabelInline_${o.id}" class="ship-label">
+                <div class="destination">${o.destination||'DESTINO'}</div>
+                <div class="order-code">${o.code}</div>
+                <div class="small">Ticket listo para imprimir.</div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      } else if(prepDone && !editingPrep){
+        prepSection=`
+        <div class="filium-log-compact">
+          <div class="filium-log-compact-main">
+            <div class="filium-log-compact-title">Preparación lista ✓</div>
+            <div class="filium-log-compact-text">
+              ${o.packages||1} bulto(s)
+              ${o.weight?` · ${o.weight}`:''}
+              ${o.dimensions?` · ${o.dimensions}`:''}
+            </div>
+          </div>
+          <div class="filium-log-compact-actions">
+            <button type="button" class="btn" onclick="showPrepTicketPreview(${o.id})">Imprimir ticket</button>
+            <button type="button" class="btn secondary" onclick="editLogSection(${o.id},'prep')">Editar</button>
+          </div>
+        </div>`;
+      } else {
+        prepSection=`
+        <section class="filium-log-section">
+          <h4>2. Preparación</h4>
+          <div class="grid3">
+            <div>
+              <label>Tipo de empaque</label>
+              <select onchange="updateOrderField(${o.id},'packageType',this.value)">
+                <option ${o.packageType==='Caja'?'selected':''}>Caja</option>
+                <option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option>
+                <option ${o.packageType==='Sobre'?'selected':''}>Sobre</option>
+                <option ${o.packageType==='Otro'?'selected':''}>Otro</option>
+              </select>
+            </div>
+            <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
+            <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
+            <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button type="button" class="btn" onclick="markPreparationReady(${o.id})">
+              ${o.prepReady?'Guardar cambios':'Marcar listo'}
+            </button>
+            ${editingPrep?`<button type="button" class="btn secondary" onclick="closeLogSectionEdit()">Cancelar</button>`:''}
+          </div>
+        </section>`;
+      }
+    }
+
     const dispatchSection = isPickup ? '' : (
       dispatchDone && !editingDispatch
       ? `<div class="filium-log-compact">
            <div class="filium-log-compact-main">
              <div class="filium-log-compact-title">Despacho guardado ✓</div>
-             <div class="filium-log-compact-text">
-               Tracking ${o.tracking||'-'} · Clave ${o.pickupKey||'-'}
-             </div>
+             <div class="filium-log-compact-text">Tracking ${o.tracking||'-'} · Clave ${o.pickupKey||'-'}</div>
            </div>
            <div class="filium-log-compact-actions">
              <button type="button" class="btn secondary" onclick="editLogSection(${o.id},'dispatch')">Editar</button>
@@ -2510,15 +2564,12 @@ function renderLogistics(){
          </section>`
     );
 
-    // 4. Seguimiento: compacto si ya está en tránsito/destino/entregado
     const trackingDone=['En tránsito','En destino','Entregado'].includes(o.status);
     const trackingSection = trackingDone
       ? `<div class="filium-log-compact">
            <div class="filium-log-compact-main">
              <div class="filium-log-compact-title">Seguimiento · ${o.status}</div>
-             <div class="filium-log-compact-text">
-               ${Number(o.balance||0)>0?`Saldo ${money(o.balance)}`:'Compra pagada'}
-             </div>
+             <div class="filium-log-compact-text">${Number(o.balance||0)>0?`Saldo ${money(o.balance)}`:'Compra pagada'}</div>
            </div>
            <div class="filium-log-compact-actions">
              ${Number(o.balance||0)>0
@@ -2559,56 +2610,19 @@ function renderLogistics(){
            </div>
          </section>`;
 
-    // Ticket:
-    // Preview only while editing logistics data and before/while marking ready.
-    const showPreview = !isPickup && (!o.prepReady || editingData || editingPrep || editingDispatch);
-
-    const ticketAside = isPickup ? '' : (
-      showPreview
-      ? `<aside class="filium-log-ticket">
-           <section class="filium-log-section">
-             <h4>Previsualización ticket</h4>
-             <div id="shipLabelInline_${o.id}" class="ship-label">
-               <div class="destination">${o.destination||'DESTINO'}</div>
-               <div class="order-code">${o.code}</div>
-               <div class="small">Vista previa mientras editas los datos de envío.</div>
-             </div>
-           </section>
-         </aside>`
-      : `<aside class="filium-log-ticket">
-           <div class="filium-ticket-compact">
-             <div class="small"><b>Ticket listo</b> · ${o.code}</div>
-             <div class="actions">
-               <button type="button" class="btn" onclick="loadShipLabel(${o.id});setTimeout(printLabel,80)">
-                 Imprimir ticket
-               </button>
-               ${isShalom && ['En tránsito','En destino'].includes(o.status)
-                 ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Revisar estado en Shalom</button>`
-                 : ''}
-             </div>
-           </div>
-         </aside>`
-    );
-
-    const main=`
-      <div class="filium-log-main">
-        ${dataSection}
-        ${prepSection}
-        ${dispatchSection}
-        ${trackingSection}
-
-        <div class="filium-log-close">
-          <button type="button" class="btn secondary" onclick="toggleLogOrder(${o.id})">Cerrar detalle</button>
-        </div>
-      </div>`;
-
     return `
       <div class="filium-log-card" id="logOrder_${o.id}">
         ${summary}
         <div class="filium-log-detail">
-          <div class="filium-log-layout">
-            ${main}
-            ${ticketAside}
+          <div class="filium-log-main">
+            ${dataSection}
+            ${prepSection}
+            ${dispatchSection}
+            ${trackingSection}
+
+            <div class="filium-log-close">
+              <button type="button" class="btn secondary" onclick="toggleLogOrder(${o.id})">Cerrar detalle</button>
+            </div>
           </div>
         </div>
       </div>`;
