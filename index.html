@@ -83,6 +83,13 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
  .log-detail-ticket{position:static}
 }
 
+
+.account-list{display:grid;gap:10px;margin-top:12px}
+.account-row{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff}
+.account-row-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}
+.trash-btn{border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px;cursor:pointer;font-weight:800}
+.payment-account-note{font-size:11px;color:var(--muted);margin-top:4px}
+
 @media(max-width:800px){.grid,.grid3,.kpis{grid-template-columns:1fr}main{padding:10px}table{min-width:850px}}
 
 .ticket{width:58mm;background:#fff;color:#000;padding:1.2mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.28}
@@ -337,7 +344,8 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
    <h3>Cobro</h3>
    <div class="grid3">
     <div><label>Total</label><input id="sTotal" readonly></div>
-    <div><label>Medio de pago</label><select id="sMethod"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select></div>
+    <div><label>Medio de pago</label><select id="sMethod" onchange="syncPaymentAccountField()"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select></div>
+    <div id="saleAccountWrap" class="hidden"><label>Cuenta de destino</label><select id="sPaymentAccount"></select><div class="payment-account-note">Selecciona dónde ingresó el pago.</div></div>
     <div><label>N.º operación</label><input id="sOperation"></div>
     <div><label>Importe recibido</label><input id="sReceived" type="number" value="0"></div>
     <div><label>Saldo pendiente</label><input id="sBalance" readonly></div>
@@ -360,14 +368,19 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   <h2>Preventa / Reserva</h2>
   <div class="notice"><b>Reserva:</b> producto con stock disponible y queda separado. <b>Preventa:</b> producto sin disponibilidad inmediata.</div>
   <div class="grid3">
-   <div><label>Tipo</label><select id="prType"><option value="reserva">Reserva</option><option value="preventa">Preventa</option></select></div>
-   <div><label>Cliente</label><input id="prClient"></div><div><label>Celular</label><input id="prPhone"></div>
-   <div><label>Producto</label><select id="prProduct"></select></div><div><label>Cantidad</label><input id="prQty" type="number" min="1" value="1"></div>
-   <div><label>Adelanto</label><input id="prAdvance" type="number" value="0"></div>
+   <div><label>Tipo</label><select id="prType" onchange="syncPreorderAmounts()"><option value="reserva">Reserva</option><option value="preventa">Preventa</option></select></div>
+   <div><label>Cliente</label><input id="prClient"></div>
+   <div><label>Celular</label><input id="prPhone"></div>
+   <div><label>Producto</label><select id="prProduct" onchange="syncPreorderAmounts()"></select></div>
+   <div><label>Cantidad</label><input id="prQty" type="number" min="1" value="1" oninput="syncPreorderAmounts()"></div>
+   <div><label>Precio lista</label><input id="prListPrice" readonly></div>
+   <div><label>Total</label><input id="prTotal" readonly></div>
+   <div><label>Con cuánto reserva / adelanto</label><input id="prAdvance" type="number" value="0" oninput="syncPreorderAmounts()"></div>
+   <div><label>Saldo por cobrar</label><input id="prBalance" readonly></div>
   </div>
-  <div class="actions" style="margin-top:14px"><button class="btn" onclick="createPreorder()">Registrar</button></div>
+  <div class="actions" style="margin-top:14px"><button class="btn" onclick="createPreorder()">Generar reserva / preventa</button></div>
  </div>
- <div class="panel tablewrap"><table><thead><tr><th>Tipo</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Adelanto</th><th>Estado</th><th>Fecha</th></tr></thead><tbody id="preRows"></tbody></table></div>
+ <div class="panel tablewrap"><table><thead><tr><th>Pedido</th><th>Tipo</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Precio lista</th><th>Total</th><th>Adelanto</th><th>Saldo</th><th>Estado</th><th>Fecha</th></tr></thead><tbody id="preRows"></tbody></table></div>
 </section>
 
 <section id="pedidos" class="hidden">
@@ -424,6 +437,17 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
  </div>
 
  <div class="panel">
+  <div class="toolbar">
+   <div>
+    <h3>Cuentas de cobro</h3>
+    <div class="small">Estas cuentas estarán disponibles en Caja y al cobrar saldos pendientes.</div>
+   </div>
+   <button class="btn" onclick="addAccountForm()">+ Nueva cuenta</button>
+  </div>
+  <div id="accountsList" class="account-list"></div>
+ </div>
+
+ <div class="panel">
   <h3>Vista previa del ticket</h3>
   <div id="configTicketPreview" class="ticket"></div>
  </div>
@@ -437,7 +461,7 @@ const SUPABASE_URL="https://dicvdjdoxvsvgokezzia.supabase.co";
 const SUPABASE_KEY="sb_publishable_xvns4feM-ur9AsnrIGrqVw_rgjFrSyk";
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const LS='filium_lite_v2';
-let db={products:[],orders:[],preorders:[],movements:[],seq:1};
+let db={products:[],orders:[],preorders:[],movements:[],accounts:[],seq:1};
 let cart=[],editingId=null,expandedLogOrderId=null,currentShipLabelOrderId=null;
 let currentUser=null;
 let currentProfile=null;
@@ -498,6 +522,7 @@ async function startSession(user){
   $('authScreen').classList.add('hidden');
   applyPermissions();
   await loadPrintSettings();
+  await loadPaymentAccounts();
   await loadFromSupabase();
  }catch(e){
   await supabaseClient.auth.signOut();
@@ -527,10 +552,10 @@ function productToRow(p){
  return {sku:p.sku,name:p.name,category:p.cat,price_list:p.list,price_negotiable:p.neg,price_min:p.min,cost:p.cost,stock:p.stock,display_stock:p.display,reserved_stock:p.reserved,preorder_stock:p.preorder,transit_stock:p.transit,updated_at:new Date().toISOString()}
 }
 function orderFromRow(r,items=[]){
- return {id:r.id,code:r.order_code,date:r.created_at,client:r.customer_name||'',dni:r.dni_ruc||'',phone:r.phone||'',items,total:Number(r.total||0),received:Number(r.received||0),balance:Number(r.balance||0),payment:r.payment_method||'',operation:r.payment_operation||'',fulfill:r.fulfillment_type||'recojo_tienda',destination:r.destination||'',address:r.address||'',carrier:r.carrier||'',status:r.logistic_status||'Por alistar',prepReady:!!r.prep_ready,packageType:r.package_type||'Caja',packages:Number(r.packages||1),weight:r.weight||'',dimensions:r.dimensions||'',tracking:r.tracking||'',pickupKey:r.pickup_key||'',shippingCost:Number(r.shipping_cost||0),shippingPaymentStatus:r.shipping_payment_status||'Pendiente',shippingPaidBy:r.shipping_paid_by||'Cliente',shippingPaymentMethod:r.shipping_payment_method||'',deliveredAt:r.delivered_at||''}
+ return {id:r.id,code:r.order_code,date:r.created_at,client:r.customer_name||'',dni:r.dni_ruc||'',phone:r.phone||'',items,total:Number(r.total||0),received:Number(r.received||0),balance:Number(r.balance||0),payment:r.payment_method||'',operation:r.payment_operation||'',paymentAccountId:r.payment_account_id||null,paymentAccountName:r.payment_account_name||'',fulfill:r.fulfillment_type||'recojo_tienda',destination:r.destination||'',address:r.address||'',carrier:r.carrier||'',status:r.logistic_status||'Por alistar',prepReady:!!r.prep_ready,packageType:r.package_type||'Caja',packages:Number(r.packages||1),weight:r.weight||'',dimensions:r.dimensions||'',tracking:r.tracking||'',pickupKey:r.pickup_key||'',shippingCost:Number(r.shipping_cost||0),shippingPaymentStatus:r.shipping_payment_status||'Pendiente',shippingPaidBy:r.shipping_paid_by||'Cliente',shippingPaymentMethod:r.shipping_payment_method||'',deliveredAt:r.delivered_at||''}
 }
 function orderToPatch(o){
- return {customer_name:o.client,dni_ruc:o.dni,phone:o.phone,total:o.total,received:o.received,balance:o.balance,payment_method:o.payment,payment_operation:o.operation,fulfillment_type:o.fulfill,destination:o.destination,address:o.address,carrier:o.carrier,logistic_status:o.status,prep_ready:o.prepReady,package_type:o.packageType,packages:o.packages,weight:o.weight,dimensions:o.dimensions,tracking:o.tracking,pickup_key:o.pickupKey,shipping_cost:o.shippingCost,shipping_payment_status:o.shippingPaymentStatus,shipping_paid_by:o.shippingPaidBy,shipping_payment_method:o.shippingPaymentMethod,delivered_at:o.deliveredAt||null,updated_at:new Date().toISOString()}
+ return {customer_name:o.client,dni_ruc:o.dni,phone:o.phone,total:o.total,received:o.received,balance:o.balance,payment_method:o.payment,payment_operation:o.operation,payment_account_id:o.paymentAccountId||null,payment_account_name:o.paymentAccountName||'',fulfillment_type:o.fulfill,destination:o.destination,address:o.address,carrier:o.carrier,logistic_status:o.status,prep_ready:o.prepReady,package_type:o.packageType,packages:o.packages,weight:o.weight,dimensions:o.dimensions,tracking:o.tracking,pickup_key:o.pickupKey,shipping_cost:o.shippingCost,shipping_payment_status:o.shippingPaymentStatus,shipping_paid_by:o.shippingPaidBy,shipping_payment_method:o.shippingPaymentMethod,delivered_at:o.deliveredAt||null,updated_at:new Date().toISOString()}
 }
 async function loadFromSupabase(){
  if(!currentUser)return;
@@ -550,7 +575,7 @@ async function loadFromSupabase(){
    (itemsByOrder[i.order_id]??=[]).push({id:i.product_id,sku:i.sku,name:i.product_name,qty:Number(i.quantity||1),price:Number(i.unit_price||0)})
   }
   db.orders=(or.data||[]).map(r=>orderFromRow(r,itemsByOrder[r.id]||[]));
-  db.preorders=(rr.data||[]).map(r=>({id:r.id,type:r.type,client:r.customer_name||'',phone:r.phone||'',productId:r.product_id,product:r.product_name||'',qty:Number(r.quantity||1),advance:Number(r.advance||0),status:r.status||'Activo',date:r.created_at}));
+  db.preorders=(rr.data||[]).map(r=>({id:r.id,type:r.type,client:r.customer_name||'',phone:r.phone||'',productId:r.product_id,product:r.product_name||'',qty:Number(r.quantity||1),listPrice:Number(r.list_price||0),total:Number(r.total||0),advance:Number(r.advance||0),balance:Number(r.balance||0),orderCode:r.order_code||'',orderId:r.order_id||null,status:r.status||'Activo',date:r.created_at}));
   db.movements=(mr.data||[]);
   const years=db.orders.map(o=>parseInt((o.code||'').split('-').pop())).filter(Number.isFinite); db.seq=Math.max(100529,(years.length?Math.max(...years)+1:100529));
   setDbStatus(true,'conectado');
@@ -755,6 +780,8 @@ async function createSale(){
    balance:Math.max(0,total-received),
    payment_method:$('sMethod').value,
    payment_operation:$('sOperation').value,
+   payment_account_id:$('sMethod').value==='Efectivo'?null:Number($('sPaymentAccount')?.value||0)||null,
+   payment_account_name:$('sMethod').value==='Efectivo'?'':(db.accounts.find(a=>String(a.id)===String($('sPaymentAccount')?.value))?.name||''),
    fulfillment_type:$('sFulfill').value,
    destination:$('sDestination').value,
    address:$('sAddress').value,
@@ -789,6 +816,8 @@ async function createSale(){
      balance:orderPayload.balance,
      payment:orderPayload.payment_method,
      operation:orderPayload.payment_operation,
+     paymentAccountName:orderPayload.payment_account_name||'',
+     paymentAccountId:orderPayload.payment_account_id||null,
      fulfill:orderPayload.fulfillment_type,
      destination:orderPayload.destination,
      address:orderPayload.address,
@@ -816,6 +845,87 @@ let printSettings={
  businessAddress:'',
  logoData:''
 };
+
+
+function accountLabel(a){
+ const parts=[a.name,a.type,a.account_number||a.alias||''].filter(Boolean);
+ return parts.join(' · ');
+}
+async function loadPaymentAccounts(){
+ try{
+  const {data,error}=await supabaseClient
+   .from('payment_accounts')
+   .select('*')
+   .order('created_at',{ascending:true});
+  if(error)throw error;
+  db.accounts=data||[];
+  renderAccounts();
+  populatePaymentAccountSelects();
+ }catch(e){
+  console.error('Error cargando cuentas:',e);
+ }
+}
+function renderAccounts(){
+ if(!$('accountsList'))return;
+ const editable=canEditPrintSettings();
+ $('accountsList').innerHTML=(db.accounts||[]).length
+  ? db.accounts.map(a=>`<div class="account-row">
+    <div class="account-row-head">
+      <div><b>${a.name||'Cuenta'}</b><div class="small">${a.type||''}</div></div>
+      ${editable?`<button class="trash-btn" onclick="deletePaymentAccount(${a.id})" title="Eliminar cuenta">🗑</button>`:''}
+    </div>
+    <div class="grid3">
+      <div><label>Titular</label><input value="${a.holder||''}" readonly></div>
+      <div><label>N.º cuenta / celular</label><input value="${a.account_number||''}" readonly></div>
+      <div><label>CCI</label><input value="${a.cci||''}" readonly></div>
+      <div><label>Alias</label><input value="${a.alias||''}" readonly></div>
+    </div>
+   </div>`).join('')
+  : '<div class="small">No hay cuentas registradas.</div>';
+}
+async function addAccountForm(){
+ if(!canEditPrintSettings())return alert('Solo Supervisor o Administrador puede agregar cuentas.');
+ const name=prompt('Nombre de la cuenta. Ej.: BCP Soles, Yape Caja, Plin Caja');
+ if(!name)return;
+ const type=prompt('Tipo: Banco, Yape, Plin, Tarjeta u Otro','Banco')||'Otro';
+ const holder=prompt('Titular','')||'';
+ const accountNumber=prompt('N.º de cuenta / celular','')||'';
+ const cci=prompt('CCI (opcional)','')||'';
+ const alias=prompt('Alias (opcional)','')||'';
+ try{
+  const {error}=await supabaseClient.from('payment_accounts').insert({
+   name:name.trim(),
+   type:type.trim(),
+   holder:holder.trim(),
+   account_number:accountNumber.trim(),
+   cci:cci.trim(),
+   alias:alias.trim(),
+   created_by:currentUser?.id||null
+  });
+  if(error)throw error;
+  await loadPaymentAccounts();
+ }catch(e){alert('Error agregando cuenta: '+(e.message||e))}
+}
+async function deletePaymentAccount(id){
+ if(!canEditPrintSettings())return alert('Solo Supervisor o Administrador puede eliminar cuentas.');
+ const a=db.accounts.find(x=>x.id===id);
+ if(!confirm('¿Eliminar la cuenta '+(a?.name||'seleccionada')+'?'))return;
+ try{
+  const {error}=await supabaseClient.from('payment_accounts').delete().eq('id',id);
+  if(error)throw error;
+  await loadPaymentAccounts();
+ }catch(e){alert('No se pudo eliminar la cuenta: '+(e.message||e))}
+}
+function populatePaymentAccountSelects(){
+ const opts=(db.accounts||[]).map(a=>`<option value="${a.id}">${accountLabel(a)}</option>`).join('');
+ if($('sPaymentAccount'))$('sPaymentAccount').innerHTML=opts||'<option value="">Sin cuentas registradas</option>';
+}
+function syncPaymentAccountField(){
+ const method=$('sMethod')?.value||'Efectivo';
+ const needsAccount=method!=='Efectivo';
+ if($('saleAccountWrap'))$('saleAccountWrap').classList.toggle('hidden',!needsAccount);
+ populatePaymentAccountSelects();
+}
 
 function canEditPrintSettings(){
  return currentProfile && ['supervisor','administrador'].includes(currentProfile.role);
@@ -1057,34 +1167,75 @@ function buildTicket(o){
  <hr>
  <div class="ticket-total">TOTAL: ${money(o.total)}</div>
  <div>Medio de pago: ${o.payment||'-'}</div>
+ ${o.paymentAccountName?`<div>Cuenta: ${o.paymentAccountName}</div>`:''}
  <div>Importe: ${money(o.received)}</div>
  ${pending>0?`<div style="font-weight:900;margin-top:1mm">PAGO PENDIENTE: ${money(pending)}</div>`:`<div>Vuelto: ${money(change)}</div>`}
  <hr>
  <div class="ticket-center">¡Gracias por tu compra!</div>
  <div class="ticket-note ticket-center" style="margin-top:2mm">Guarde este ticket como constancia de su compra.</div>`;
 }
-async function createPreorder(){
- let type=$('prType').value,p=db.products.find(x=>x.id==$('prProduct').value),qty=+$('prQty').value||1;if(!p)return;
- if(type==='reserva'&&qty>available(p))return alert('No hay stock disponible suficiente para reservar.');
- try{
-   const row={type,customer_name:$('prClient').value||'Cliente',phone:$('prPhone').value,product_id:p.id,product_name:p.name,quantity:qty,advance:+$('prAdvance').value||0,status:'Activo'};
-   const {error}=await supabaseClient.from('preorders_reservations').insert(row);if(error)throw error;
-   const patch=type==='reserva'?{reserved_stock:p.reserved+qty}:{preorder_stock:p.preorder+qty};
-   patch.updated_at=new Date().toISOString();
-   const {error:pe}=await supabaseClient.from('products').update(patch).eq('id',p.id);if(pe)throw pe;
-   await recordMovement({
-     product:p,
-     type:type,
-     qty:qty,
-     before:p.stock,
-     after:p.stock,
-     reference:type==='reserva'?'Reserva':'Preventa',
-     detail:(type==='reserva'?'Stock separado para ':'Preventa registrada para ')+($('prClient').value||'Cliente')
-   });
-   await loadFromSupabase();
- }catch(e){alert('Error registrando '+type+': '+e.message)}
+function syncPreorderAmounts(){
+ const p=db.products.find(x=>String(x.id)===String($('prProduct')?.value));
+ const qty=Math.max(1,Number($('prQty')?.value||1));
+ const list=Number(p?.list||0);
+ const total=list*qty;
+ const advance=Math.max(0,Number($('prAdvance')?.value||0));
+ const balance=Math.max(0,total-advance);
+ if($('prListPrice'))$('prListPrice').value=money(list);
+ if($('prTotal'))$('prTotal').value=money(total);
+ if($('prBalance'))$('prBalance').value=money(balance);
 }
-function renderPreorders(){$('preRows').innerHTML=db.preorders.map(r=>`<tr><td><span class="badge ${r.type==='reserva'?'ok':'warn'}">${r.type}</span></td><td>${r.client}<div class="small">${r.phone||''}</div></td><td>${r.product}</td><td>${r.qty}</td><td>${money(r.advance)}</td><td>${r.status}</td><td>${new Date(r.date).toLocaleDateString('es-PE')}</td></tr>`).join('')}
+
+async function createPreorder(){
+ let type=$('prType').value;
+ let p=db.products.find(x=>String(x.id)===String($('prProduct').value));
+ let qty=Math.max(1,+$('prQty').value||1);
+ if(!p)return alert('Selecciona un producto.');
+ if(type==='reserva' && qty>available(p))return alert('No hay stock disponible suficiente para reservar.');
+ const listPrice=Number(p.list||0);
+ const total=listPrice*qty;
+ const advance=Math.max(0,+$('prAdvance').value||0);
+ if(advance>total)return alert('El adelanto no puede ser mayor al total.');
+ try{
+   const {data,error}=await supabaseClient.rpc('create_filium_reservation',{
+     p_type:type,
+     p_customer_name:$('prClient').value||'Cliente',
+     p_phone:$('prPhone').value||'',
+     p_product_id:p.id,
+     p_quantity:qty,
+     p_advance:advance
+   });
+   if(error)throw error;
+   const result=Array.isArray(data)?data[0]:data;
+   await loadFromSupabase();
+   alert((type==='reserva'?'Reserva':'Preventa')+' registrada.\nPedido: '+(result?.order_code||'-')+'\nTotal: '+money(total)+'\nAdelanto: '+money(advance)+'\nSaldo: '+money(Math.max(0,total-advance)));
+   $('prClient').value='';
+   $('prPhone').value='';
+   $('prQty').value='1';
+   $('prAdvance').value='0';
+   syncPreorderAmounts();
+ }catch(e){
+   console.error(e);
+   alert('Error registrando '+type+': '+(e.message||e));
+ }
+}
+
+function renderPreorders(){
+ $('preRows').innerHTML=db.preorders.length?db.preorders.map(r=>`<tr>
+  <td><b>${r.orderCode||'-'}</b></td>
+  <td><span class="badge ${r.type==='reserva'?'ok':'warn'}">${r.type}</span></td>
+  <td>${r.client}<div class="small">${r.phone||''}</div></td>
+  <td>${r.product}</td>
+  <td>${r.qty}</td>
+  <td>${money(r.listPrice)}</td>
+  <td><b>${money(r.total)}</b></td>
+  <td>${money(r.advance)}</td>
+  <td><b>${money(r.balance)}</b></td>
+  <td>${r.status}</td>
+  <td>${new Date(r.date).toLocaleDateString('es-PE')}</td>
+ </tr>`).join(''):'<tr><td colspan="11" class="small">No hay reservas o preventas registradas.</td></tr>';
+}
+
 function fulfillLabel(o){return o.fulfill==='recojo_tienda'?'Recojo en tienda':o.fulfill==='delivery_lima'?'Delivery Lima':'Provincia'}
 function renderOrders(){let q=($('orderSearch').value||'').toLowerCase();let os=db.orders.filter(o=>(o.code+' '+o.client).toLowerCase().includes(q)).slice().reverse();$('ordersList').innerHTML=os.map(o=>`<div class="order-card"><div class="order-head"><div><b>${o.code}</b> · ${o.client}<div class="small">${new Date(o.date).toLocaleString('es-PE')} · ${fulfillLabel(o)}</div></div><div><span class="badge ${o.balance>0?'warn':'ok'}">${o.balance>0?'Pago pendiente':'Pagado'}</span> <span class="badge info">${o.status}</span></div></div><div style="margin-top:8px">${o.items.map(i=>`${i.qty}× ${i.name}`).join(' · ')}</div><div class="actions" style="margin-top:10px"><button class="btn secondary" onclick="buildTicketById(${o.id})">Ticket venta</button></div></div>`).join('')}
 function buildTicketById(id){let o=db.orders.find(x=>x.id===id);buildTicket(o);document.querySelector('[data-tab="caja"]').click()}
@@ -1210,26 +1361,50 @@ async function setLogStatus(id,status){
 }
 async function collectBalance(id){
  let o=db.orders.find(x=>x.id===id); if(!o||o.balance<=0)return;
- let amount=prompt('Saldo pendiente '+money(o.balance)+'. Ingresa el importe cobrado:',o.balance);if(amount===null)return;
- let n=Number(amount);if(!n||n<=0)return alert('Importe inválido.');
- let paid=Math.min(n,o.balance);o.received+=paid;o.balance=Math.max(0,o.total-o.received);
- try{const {error}=await supabaseClient.from('orders').update({received:o.received,balance:o.balance,updated_at:new Date().toISOString()}).eq('id',id);if(error)throw error;buildTicket(o);await loadFromSupabase()}catch(e){alert('Error cobrando saldo: '+e.message)}
-}
-function autoLoadPendingShipLabel(){
- const pending=db.orders.find(o=>o.status==='Por alistar');
- if(pending){
-  try{loadShipLabel(pending.id)}catch(e){console.error(e)}
- }
-}
 
-function toggleLogOrder(id){
- expandedLogOrderId = expandedLogOrderId===id ? null : id;
- renderLogistics();
- if(expandedLogOrderId===id){
-  setTimeout(()=> {
-   const el=document.getElementById('logOrder_'+id);
-   if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
-  },50);
+ let amount=prompt('Saldo pendiente '+money(o.balance)+'. Ingresa el importe cobrado:',o.balance);
+ if(amount===null)return;
+ let n=Number(amount);
+ if(!n||n<=0)return alert('Importe inválido.');
+
+ const method=prompt('Medio de pago: Efectivo, Yape, Plin, Transferencia o Tarjeta',o.payment||'Efectivo')||'Efectivo';
+ let accountId=null,accountName='';
+
+ if(method.toLowerCase()!=='efectivo'){
+  if(!(db.accounts||[]).length){
+   alert('No hay cuentas registradas. Agrégalas en Configuración → Cuentas de cobro.');
+   return;
+  }
+  const list=db.accounts.map((a,i)=>`${i+1}. ${accountLabel(a)}`).join('\n');
+  const choice=prompt('¿A qué cuenta ingresó el pago?\n'+list,'1');
+  if(choice===null)return;
+  const idx=Number(choice)-1;
+  const acc=db.accounts[idx];
+  if(!acc)return alert('Cuenta inválida.');
+  accountId=acc.id;
+  accountName=acc.name;
+ }
+
+ let paid=Math.min(n,o.balance);
+ o.received+=paid;
+ o.balance=Math.max(0,o.total-o.received);
+ o.payment=method;
+ o.paymentAccountId=accountId;
+ o.paymentAccountName=accountName;
+
+ try{
+  const {error}=await supabaseClient.rpc('collect_filium_balance',{
+   p_order_id:id,
+   p_amount:paid,
+   p_payment_method:method,
+   p_payment_account_id:accountId,
+   p_payment_account_name:accountName
+  });
+  if(error)throw error;
+  buildTicket(o);
+  await loadFromSupabase();
+ }catch(e){
+  alert('Error cobrando saldo: '+(e.message||e));
  }
 }
 
@@ -1438,9 +1613,9 @@ function printLabel(){
  },3000);
 }
 function resetDemo(){location.reload()}
-function renderAll(){renderInventory();renderReceiptProducts();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
+function renderAll(){renderInventory();renderReceiptProducts();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();syncPreorderAmounts();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
-syncDeliveryFields();renderCart();initAuth();
+syncDeliveryFields();renderCart();syncPaymentAccountField();initAuth();
 $('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 </script>
 </body>
