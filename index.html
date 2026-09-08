@@ -254,8 +254,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 .ticket hr{border:0;border-top:1px dashed #000;margin:1.5mm 0}
 
 
-/* FILIUM: impresión térmica en rollo continuo 62 mm */
-.ticket,
+/* FILIUM: rollos continuos */
 .ship-label{
   width:62mm!important;
   height:auto!important;
@@ -277,11 +276,50 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
 }
 
 
+
+/* FILIUM v5.9 · Ticket de venta 58 mm real */
+#ticket58,
+#configTicketPreview{
+  width:58mm!important;
+  max-width:58mm!important;
+  min-width:58mm!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  box-sizing:border-box!important;
+}
+
+/* Producto ocupa una línea completa.
+   Valores monetarios van debajo en tres columnas estables. */
+.ticket .ticket-items-head,
+.ticket .ticket-item-row{
+  display:grid;
+  grid-template-columns:9mm 19mm 22mm;
+  column-gap:1mm;
+  align-items:start;
+  width:100%;
+}
+.ticket .ticket-items-head > span:nth-child(2),
+.ticket .ticket-item-row > span:nth-child(2),
+.ticket .ticket-items-head > span:nth-child(3),
+.ticket .ticket-item-row > span:nth-child(3){
+  text-align:right;
+}
+.ticket .ticket-product{
+  display:block;
+  width:100%;
+  font-weight:800;
+  margin-top:1.5mm;
+  overflow-wrap:anywhere;
+  line-height:1.2;
+}
+
 /* FILIUM v5.8 · impresión idéntica a previsualización */
 .ticket-print-exact{
-  width:62mm!important;
-  max-width:62mm!important;
-  min-width:62mm!important;
+  width:58mm!important;
+  max-width:58mm!important;
+  min-width:58mm!important;
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
@@ -347,15 +385,14 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
     break-inside:avoid!important;
   }
 
-  body.print-ticket *{display:none!important}
-  body.print-ticket #printTicketArea,
-  body.print-ticket #printTicketArea *{display:block!important}
+  body.print-ticket > *:not(#printTicketArea){display:none!important}
+  body.print-ticket #printTicketArea{display:block!important}
 
   body.print-ticket #printTicketArea{
     position:absolute!important;
     left:0!important;
     top:0!important;
-    width:62mm!important;
+    width:58mm!important;
     height:auto!important;
     min-height:0!important;
     max-height:none!important;
@@ -368,10 +405,25 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
     break-inside:avoid!important;
   }
 
+
+  body.print-ticket #printTicketArea .ticket-items-head,
+  body.print-ticket #printTicketArea .ticket-item-row{
+    display:grid!important;
+    grid-template-columns:9mm 19mm 22mm!important;
+    column-gap:1mm!important;
+    width:100%!important;
+    align-items:start!important;
+  }
+  body.print-ticket #printTicketArea .ticket-product{
+    display:block!important;
+    width:100%!important;
+    overflow-wrap:anywhere!important;
+  }
+
   body.print-ticket #printTicketArea .ticket{
-    width:62mm!important;
-    max-width:62mm!important;
-    min-width:62mm!important;
+    width:58mm!important;
+    max-width:58mm!important;
+    min-width:58mm!important;
     height:auto!important;
     min-height:0!important;
     max-height:none!important;
@@ -555,7 +607,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   </div>
   <div class="actions" style="margin-top:14px"><button class="btn" onclick="createSale()">Generar orden de pedido</button></div>
  </div>
- <div class="panel"><h3>Último ticket de venta</h3><div id="ticket58" class="ticket"><div class="logo">FILIUM</div><div style="text-align:center">Sin venta registrada</div></div><div class="actions" style="margin-top:12px"><button class="btn secondary" onclick="printTicket()">Imprimir 62 mm · rollo continuo</button></div></div>
+ <div class="panel"><h3>Último ticket de venta</h3><div id="ticket58" class="ticket"><div class="logo">FILIUM</div><div style="text-align:center">Sin venta registrada</div></div><div class="actions" style="margin-top:12px"><button class="btn secondary" onclick="printTicket()">Imprimir 58 mm · rollo continuo</button></div></div>
 
  <div class="panel">
   <div class="toolbar">
@@ -2713,13 +2765,14 @@ function printTicket(){
  const clone=source.cloneNode(true);
  clone.removeAttribute('id');
 
- // Copiar apariencia exacta de la previsualización antes de ajustar solo el papel.
+ // Copia la apariencia del preview, pero conserva los layouts CSS
+ // críticos (grid/flex) mediante las reglas de impresión.
  copyComputedStyles(source,clone);
 
  clone.classList.add('ticket-print-exact');
- clone.style.width='62mm';
- clone.style.maxWidth='62mm';
- clone.style.minWidth='62mm';
+ clone.style.width='58mm';
+ clone.style.maxWidth='58mm';
+ clone.style.minWidth='58mm';
  clone.style.height='auto';
  clone.style.minHeight='0';
  clone.style.maxHeight='none';
@@ -2730,20 +2783,27 @@ function printTicket(){
  clone.style.boxShadow='none';
  clone.style.background='#fff';
 
+ // Eliminar display inline copiado en los bloques que deben ser grid.
+ clone.querySelectorAll('.ticket-items-head,.ticket-item-row').forEach(el=>{
+   el.style.removeProperty('display');
+   el.style.removeProperty('grid-template-columns');
+   el.style.removeProperty('grid-template-areas');
+ });
+
  area.appendChild(clone);
 
- // Forzar dimensiones reales antes de medir.
+ // Medir fuera de pantalla.
  area.style.display='block';
  area.style.position='fixed';
  area.style.left='-10000px';
  area.style.top='0';
- area.style.width='62mm';
+ area.style.width='58mm';
  area.style.height='auto';
  area.style.overflow='visible';
 
  const heightPx=Math.ceil(clone.getBoundingClientRect().height);
  const pxPerMm=96/25.4;
- const heightMm=Math.max(20,Math.ceil(heightPx/pxPerMm)+4);
+ const heightMm=Math.max(20,Math.ceil(heightPx/pxPerMm)+5);
 
  let dynamicStyle=$('dynamicPrintPageSize');
  if(!dynamicStyle){
@@ -2751,7 +2811,12 @@ function printTicket(){
    dynamicStyle.id='dynamicPrintPageSize';
    document.head.appendChild(dynamicStyle);
  }
- dynamicStyle.textContent=`@media print{@page{size:62mm ${heightMm}mm;margin:0}}`;
+
+ // El driver del usuario muestra "58mm Roll".
+ dynamicStyle.textContent=`@media print{
+   @page{size:58mm ${heightMm}mm;margin:0}
+   html,body{width:58mm!important}
+ }`;
 
  area.style.display='';
  area.style.position='';
@@ -2766,7 +2831,7 @@ function printTicket(){
  const cleanup=()=>{
   document.body.classList.remove('print-ticket');
   area.innerHTML='';
-  if(dynamicStyle)dynamicStyle.textContent='';
+  dynamicStyle.textContent='';
   window.removeEventListener('afterprint',cleanup);
  };
 
