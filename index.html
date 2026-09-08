@@ -493,26 +493,263 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   <div class="actions" style="margin-top:14px"><button class="btn" onclick="createSale()">Generar orden de pedido</button></div>
  </div>
  <div class="panel"><h3>Último ticket de venta</h3><div id="ticket58" class="ticket"><div class="logo">FILIUM</div><div style="text-align:center">Sin venta registrada</div></div><div class="actions" style="margin-top:12px"><button class="btn secondary" onclick="printTicket()">Imprimir 62 mm · rollo continuo</button></div></div>
+
+ <div class="panel">
+  <div class="toolbar">
+   <div>
+    <h3>Resumen de caja</h3>
+    <div class="small">Saldo registrado por cuenta según cobros, transferencias y gastos.</div>
+   </div>
+   <button class="btn secondary" type="button" onclick="loadCashData()">Actualizar</button>
+  </div>
+  <div id="cashSummary" class="grid3" style="margin-top:12px"></div>
+ </div>
+
+ <div class="panel">
+  <h3>Transferencia entre cuentas</h3>
+  <div class="grid3">
+   <div>
+    <label>Cuenta origen</label>
+    <select id="cashTransferFrom"></select>
+   </div>
+   <div>
+    <label>Cuenta destino</label>
+    <select id="cashTransferTo"></select>
+   </div>
+   <div>
+    <label>Importe</label>
+    <input id="cashTransferAmount" type="number" min="0.01" step="0.01">
+   </div>
+   <div style="grid-column:1/-1">
+    <label>Referencia / observación</label>
+    <input id="cashTransferNote" placeholder="Ej. Transferencia de cierre de caja a IMPONOVA SAC">
+   </div>
+  </div>
+  <div class="actions" style="margin-top:12px">
+   <button class="btn" type="button" onclick="createCashTransfer()">Registrar transferencia</button>
+  </div>
+ </div>
+
+ <div class="panel">
+  <div class="toolbar">
+   <div>
+    <h3>Historial de caja</h3>
+    <div class="small">Todo ingreso, transferencia y gasto queda asociado al usuario que realizó la operación.</div>
+   </div>
+   <div class="actions">
+    <select id="cashHistoryAccount" onchange="renderCashHistory()" style="width:190px"></select>
+    <input id="cashHistorySearch" placeholder="Pedido / usuario / referencia" oninput="renderCashHistory()" style="width:230px">
+   </div>
+  </div>
+  <div class="tablewrap" style="margin-top:12px">
+   <table>
+    <thead>
+     <tr>
+      <th>Fecha</th>
+      <th>Tipo</th>
+      <th>Pedido</th>
+      <th>Medio</th>
+      <th>Cuenta</th>
+      <th>Ingreso</th>
+      <th>Salida</th>
+      <th>Responsable</th>
+      <th>Detalle</th>
+     </tr>
+    </thead>
+    <tbody id="cashHistoryRows"></tbody>
+   </table>
+  </div>
+ </div>
+
+ <div id="expenseCashPanel" class="panel hidden">
+  <h3>Caja de gastos</h3>
+  <div class="small">Solo Supervisor y Administrador.</div>
+  <div class="grid3" style="margin-top:12px">
+   <div>
+    <label>Categoría</label>
+    <select id="expenseCategory">
+     <option>Logística</option>
+     <option>Administrativo</option>
+     <option>Inventario</option>
+     <option>Marketing</option>
+     <option>Servicios</option>
+     <option>Otro</option>
+    </select>
+   </div>
+   <div><label>Concepto</label><input id="expenseDescription"></div>
+   <div><label>Importe</label><input id="expenseAmount" type="number" min="0.01" step="0.01"></div>
+   <div>
+    <label>Cuenta de salida</label>
+    <select id="expenseAccount"></select>
+   </div>
+   <div><label>Comprobante / referencia</label><input id="expenseReference"></div>
+  </div>
+  <div class="actions" style="margin-top:12px">
+   <button class="btn" type="button" onclick="registerExpense()">Registrar gasto</button>
+  </div>
+
+  <div class="tablewrap" style="margin-top:14px">
+   <table>
+    <thead>
+     <tr>
+      <th>Fecha</th>
+      <th>Categoría</th>
+      <th>Concepto</th>
+      <th>Cuenta</th>
+      <th>Importe</th>
+      <th>Responsable</th>
+      <th>Referencia</th>
+     </tr>
+    </thead>
+    <tbody id="expenseRows"></tbody>
+   </table>
+  </div>
+ </div>
 </section>
 
 <section id="preventa" class="hidden">
  <div class="panel">
   <h2>Preventa / Reserva</h2>
-  <div class="notice"><b>Reserva:</b> producto con stock disponible y queda separado. <b>Preventa:</b> producto sin disponibilidad inmediata.</div>
-  <div class="grid3">
-   <div><label>Tipo</label><select id="prType" onchange="syncPreorderAmounts()"><option value="reserva">Reserva</option><option value="preventa">Preventa</option></select></div>
+  <div class="notice"><b>Reserva:</b> separa stock disponible. <b>Preventa:</b> registra una venta futura sin stock inmediato.</div>
+
+  <div class="grid3" style="margin-top:12px">
+   <div>
+    <label>Tipo</label>
+    <select id="prType">
+     <option value="reserva">Reserva</option>
+     <option value="preventa">Preventa</option>
+    </select>
+   </div>
    <div><label>Cliente</label><input id="prClient"></div>
    <div><label>Celular</label><input id="prPhone"></div>
-   <div><label>Producto</label><select id="prProduct" onchange="syncPreorderAmounts()"></select></div>
-   <div><label>Cantidad</label><input id="prQty" type="number" min="1" value="1" oninput="syncPreorderAmounts()"></div>
-   <div><label>Precio lista</label><input id="prListPrice" readonly></div>
-   <div><label>Total</label><input id="prTotal" readonly></div>
-   <div><label>Con cuánto reserva / adelanto</label><input id="prAdvance" type="number" value="0" oninput="syncPreorderAmounts()"></div>
-   <div><label>Saldo por cobrar</label><input id="prBalance" readonly></div>
   </div>
-  <div class="actions" style="margin-top:14px"><button class="btn" onclick="createPreorder()">Generar reserva / preventa</button></div>
  </div>
- <div class="panel tablewrap"><table><thead><tr><th>Pedido</th><th>Tipo</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Precio lista</th><th>Total</th><th>Adelanto</th><th>Saldo</th><th>Estado</th><th>Fecha</th></tr></thead><tbody id="preRows"></tbody></table></div>
+
+ <div class="panel">
+  <h3>Carrito</h3>
+  <div class="grid3">
+   <div>
+    <label>Producto</label>
+    <select id="prProduct"></select>
+   </div>
+   <div>
+    <label>Cantidad</label>
+    <input id="prQty" type="number" min="1" value="1">
+   </div>
+   <div style="display:flex;align-items:end">
+    <button class="btn" type="button" onclick="addReservationCartItem()">Agregar al carrito</button>
+   </div>
+  </div>
+
+  <div class="tablewrap" style="margin-top:12px">
+   <table>
+    <thead>
+     <tr>
+      <th>Producto</th>
+      <th>Cant.</th>
+      <th>Precio lista</th>
+      <th>Precio de venta</th>
+      <th>Subtotal</th>
+      <th></th>
+     </tr>
+    </thead>
+    <tbody id="reservationCartRows"></tbody>
+   </table>
+  </div>
+
+  <div class="grid3" style="margin-top:12px">
+   <div><label>Total precio lista</label><input id="prListTotal" readonly></div>
+   <div><label>Total acordado</label><input id="prSaleTotal" readonly></div>
+   <div><label>Saldo pendiente</label><input id="prBalance" readonly></div>
+  </div>
+ </div>
+
+ <div class="panel">
+  <h3>Cobro</h3>
+  <div class="grid3">
+   <div>
+    <label>Abono</label>
+    <input id="prAdvance" type="number" min="0" step="0.01" value="0" oninput="renderReservationCart(false)">
+   </div>
+
+   <div>
+    <label>Medio de pago</label>
+    <select id="prPaymentMethod" onchange="syncReservationAccountField()">
+     <option>Efectivo</option>
+     <option>Yape</option>
+     <option>Plin</option>
+     <option>Transferencia</option>
+     <option>Tarjeta</option>
+    </select>
+   </div>
+
+   <div id="prPaymentAccountWrap" class="hidden">
+    <label>Cuenta de destino</label>
+    <select id="prPaymentAccount"></select>
+   </div>
+
+   <div>
+    <label>N.º operación</label>
+    <input id="prPaymentOperation">
+   </div>
+  </div>
+ </div>
+
+ <div class="panel">
+  <h3>Entrega</h3>
+  <div class="grid3">
+   <div>
+    <label>Modalidad</label>
+    <select id="prFulfillment" onchange="syncReservationDeliveryFields()">
+     <option value="recojo_tienda">Recojo en tienda</option>
+     <option value="delivery_lima">Delivery Lima</option>
+     <option value="provincia">Envío a provincia</option>
+    </select>
+   </div>
+
+   <div id="prDestinationWrap" class="hidden">
+    <label>Destino / Distrito</label>
+    <input id="prDestination">
+   </div>
+
+   <div id="prAddressWrap" class="hidden">
+    <label>Dirección / Agencia</label>
+    <input id="prAddress">
+   </div>
+
+   <div id="prCarrierWrap" class="hidden">
+    <label>Operador</label>
+    <input id="prCarrier" placeholder="Ej. Shalom / Olva / Indrive">
+   </div>
+  </div>
+ </div>
+
+ <div class="panel">
+  <div class="actions">
+   <button class="btn" type="button" onclick="createReservationFromCart()">Generar reserva / preventa</button>
+   <button class="btn secondary" type="button" onclick="clearReservationCart()">Vaciar carrito</button>
+  </div>
+ </div>
+
+ <div class="panel tablewrap">
+  <table>
+   <thead>
+    <tr>
+     <th>Pedido</th>
+     <th>Tipo</th>
+     <th>Cliente</th>
+     <th>Productos</th>
+     <th>Total</th>
+     <th>Abono</th>
+     <th>Saldo</th>
+     <th>Entrega</th>
+     <th>Estado</th>
+     <th>Fecha</th>
+    </tr>
+   </thead>
+   <tbody id="preRows"></tbody>
+  </table>
+ </div>
 </section>
 
 <section id="pedidos" class="hidden">
@@ -593,7 +830,8 @@ const SUPABASE_URL="https://dicvdjdoxvsvgokezzia.supabase.co";
 const SUPABASE_KEY="sb_publishable_xvns4feM-ur9AsnrIGrqVw_rgjFrSyk";
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const LS='filium_lite_v2';
-let db={products:[],orders:[],preorders:[],movements:[],accounts:[],seq:1};
+let db={products:[],orders:[],preorders:[],movements:[],accounts:[],cashMovements:[],expenses:[],seq:1};
+let reservationCart=[];
 let cart=[],editingId=null,expandedLogOrderId=null,currentShipLabelOrderId=null,logEditOrderId=null,logEditSection=null;
 let currentUser=null;
 let currentProfile=null;
@@ -601,6 +839,7 @@ const ROLE_LABELS={tienda:'Tienda',supervisor:'Supervisor',administrador:'Admini
 function canManageInventory(){return currentProfile && ['supervisor','administrador'].includes(currentProfile.role)}
 function canReceiveInventory(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
 function canGenerateSales(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
+function canManageExpenses(){return currentProfile && ['supervisor','administrador'].includes(currentProfile.role)}
 function canEditShipping(){return currentProfile && ['tienda','supervisor','administrador'].includes(currentProfile.role)}
 function actorName(){return currentProfile?.full_name || currentUser?.email || 'Usuario'}
 function actorRole(){return currentProfile?.role || 'sin_perfil'}
@@ -644,6 +883,7 @@ function applyPermissions(){
  if(!manage)$('productForm').classList.add('hidden');
  if($('receiptPanel'))$('receiptPanel').classList.toggle('hidden',!canReceiveInventory());
  if($('cfgBusinessName'))applyPrintSettingsPermissions();
+ if($('expenseCashPanel'))$('expenseCashPanel').classList.toggle('hidden',!canManageExpenses());
  renderInventory();
  renderReceiptProducts();
 }
@@ -656,6 +896,7 @@ async function startSession(user){
   await loadPrintSettings();
   await loadPaymentAccounts();
   await loadFromSupabase();
+  await loadCashData();
  }catch(e){
   await supabaseClient.auth.signOut();
   currentUser=null;currentProfile=null;
@@ -689,6 +930,226 @@ function orderFromRow(r,items=[]){
 function orderToPatch(o){
  return {customer_name:o.client,dni_ruc:o.dni,phone:o.phone,total:o.total,received:o.received,balance:o.balance,payment_method:o.payment,payment_operation:o.operation,payment_account_id:o.paymentAccountId||null,payment_account_name:o.paymentAccountName||'',fulfillment_type:o.fulfill,destination:o.destination,address:o.address,carrier:o.carrier,logistic_status:o.status,prep_ready:o.prepReady,package_type:o.packageType,packages:o.packages,weight:o.weight,dimensions:o.dimensions,tracking:o.tracking,pickup_key:o.pickupKey,shipping_cost:o.shippingCost,shipping_payment_status:o.shippingPaymentStatus,shipping_paid_by:o.shippingPaidBy,shipping_payment_method:o.shippingPaymentMethod,delivered_at:o.deliveredAt||null,updated_at:new Date().toISOString()}
 }
+
+async function loadCashData(){
+ if(!currentUser)return;
+ try{
+  const [cm,ex]=await Promise.all([
+   supabaseClient.from('cash_movements').select('*').order('created_at',{ascending:false}).limit(1000),
+   canManageExpenses()
+     ? supabaseClient.from('cash_expenses').select('*').order('created_at',{ascending:false}).limit(500)
+     : Promise.resolve({data:[],error:null})
+  ]);
+  if(cm.error)throw cm.error;
+  if(ex.error)throw ex.error;
+  db.cashMovements=cm.data||[];
+  db.expenses=ex.data||[];
+  renderCashFinance();
+ }catch(e){
+  console.error('Error cargando caja:',e);
+ }
+}
+
+function cashAccountOptions(includeCash=true){
+ const opts=[];
+ if(includeCash)opts.push({id:'cash',name:'Caja efectivo'});
+ for(const a of (db.accounts||[]))opts.push({id:String(a.id),name:a.name||'Cuenta'});
+ return opts;
+}
+
+function populateCashAccountSelectors(){
+ const all=cashAccountOptions(true);
+ const destination=cashAccountOptions(false);
+
+ const htmlAll=all.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+ const htmlDest=destination.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+
+ if($('cashTransferFrom'))$('cashTransferFrom').innerHTML=htmlAll;
+ if($('cashTransferTo'))$('cashTransferTo').innerHTML=htmlDest;
+ if($('expenseAccount'))$('expenseAccount').innerHTML=htmlAll;
+
+ if($('cashHistoryAccount')){
+   $('cashHistoryAccount').innerHTML='<option value="">Todas las cuentas</option>'+htmlAll;
+ }
+}
+
+function movementSignedAmount(m){
+ const amount=Number(m.amount||0);
+ if(['payment','transfer_in','adjustment_in'].includes(m.movement_type))return amount;
+ if(['transfer_out','expense','adjustment_out'].includes(m.movement_type))return -amount;
+ return Number(m.signed_amount||0);
+}
+
+function renderCashSummary(){
+ const root=$('cashSummary');
+ if(!root)return;
+ const balances={};
+ for(const m of (db.cashMovements||[])){
+   const name=m.account_name||'Caja efectivo';
+   balances[name]=(balances[name]||0)+movementSignedAmount(m);
+ }
+ root.innerHTML=Object.keys(balances).length
+   ? Object.entries(balances).map(([name,value])=>`
+      <div class="notice">
+       <div class="small">${name}</div>
+       <div style="font-size:20px;font-weight:800;margin-top:4px">${money(value)}</div>
+      </div>`).join('')
+   : '<div class="small">Todavía no hay movimientos de caja.</div>';
+}
+
+function cashMovementTypeLabel(type){
+ const labels={
+  payment:'Cobro',
+  transfer_in:'Transferencia recibida',
+  transfer_out:'Transferencia enviada',
+  expense:'Gasto',
+  adjustment_in:'Ingreso manual',
+  adjustment_out:'Salida manual'
+ };
+ return labels[type]||type||'-';
+}
+
+function renderCashHistory(){
+ const root=$('cashHistoryRows');
+ if(!root)return;
+
+ const account=$('cashHistoryAccount')?.value||'';
+ const q=($('cashHistorySearch')?.value||'').toLowerCase();
+
+ const rows=(db.cashMovements||[]).filter(m=>{
+   const accountKey=m.account_id?String(m.account_id):'cash';
+   const text=[
+    m.order_code,m.actor_name,m.actor_email,m.account_name,m.payment_method,m.reference,m.detail
+   ].filter(Boolean).join(' ').toLowerCase();
+   return (!account||account===accountKey) && (!q||text.includes(q));
+ });
+
+ root.innerHTML=rows.length?rows.map(m=>{
+  const signed=movementSignedAmount(m);
+  return `<tr>
+   <td>${new Date(m.created_at).toLocaleString('es-PE')}</td>
+   <td>${cashMovementTypeLabel(m.movement_type)}</td>
+   <td>${m.order_code||'-'}</td>
+   <td>${m.payment_method||'-'}</td>
+   <td>${m.account_name||'Caja efectivo'}</td>
+   <td>${signed>0?`<b>${money(signed)}</b>`:'-'}</td>
+   <td>${signed<0?`<b>${money(Math.abs(signed))}</b>`:'-'}</td>
+   <td>${m.actor_name||m.actor_email||'-'}<div class="small">${m.actor_role||''}</div></td>
+   <td>${m.detail||m.reference||'-'}</td>
+  </tr>`;
+ }).join(''):'<tr><td colspan="9" class="small">No hay movimientos.</td></tr>';
+}
+
+function renderExpenses(){
+ const root=$('expenseRows');
+ if(!root)return;
+ if(!canManageExpenses()){
+  root.innerHTML='';
+  return;
+ }
+ root.innerHTML=(db.expenses||[]).length
+  ? db.expenses.map(e=>`<tr>
+    <td>${new Date(e.created_at).toLocaleString('es-PE')}</td>
+    <td>${e.category||'-'}</td>
+    <td>${e.description||'-'}</td>
+    <td>${e.account_name||'Caja efectivo'}</td>
+    <td><b>${money(e.amount)}</b></td>
+    <td>${e.actor_name||e.actor_email||'-'}</td>
+    <td>${e.reference||'-'}</td>
+   </tr>`).join('')
+  : '<tr><td colspan="7" class="small">No hay gastos registrados.</td></tr>';
+}
+
+function renderCashFinance(){
+ populateCashAccountSelectors();
+ renderCashSummary();
+ renderCashHistory();
+ renderExpenses();
+}
+
+async function registerCashPayment({orderId=null,orderCode='',amount=0,paymentMethod='Efectivo',accountId=null,accountName='',reference='',detail=''}){
+ if(!(Number(amount)>0))return;
+ const {error}=await supabaseClient.rpc('register_filium_cash_payment',{
+  p_order_id:orderId,
+  p_order_code:orderCode||'',
+  p_amount:Number(amount),
+  p_payment_method:paymentMethod||'Efectivo',
+  p_account_id:accountId,
+  p_account_name:accountName||'Caja efectivo',
+  p_reference:reference||'',
+  p_detail:detail||''
+ });
+ if(error)throw error;
+}
+
+async function createCashTransfer(){
+ const from=$('cashTransferFrom')?.value||'';
+ const to=$('cashTransferTo')?.value||'';
+ const amount=Number($('cashTransferAmount')?.value||0);
+ const note=($('cashTransferNote')?.value||'').trim();
+
+ if(!from||!to)return alert('Selecciona cuenta origen y destino.');
+ if(from===to)return alert('La cuenta origen y destino no pueden ser iguales.');
+ if(!(amount>0))return alert('Ingresa un importe válido.');
+
+ const fromAcc=from==='cash'?null:(db.accounts||[]).find(a=>String(a.id)===from);
+ const toAcc=(db.accounts||[]).find(a=>String(a.id)===to);
+ if(to!=='cash'&&!toAcc)return alert('Cuenta destino inválida.');
+
+ try{
+  const {error}=await supabaseClient.rpc('transfer_filium_funds',{
+   p_source_account_id:from==='cash'?null:Number(from),
+   p_source_account_name:from==='cash'?'Caja efectivo':(fromAcc?.name||''),
+   p_destination_account_id:to==='cash'?null:Number(to),
+   p_destination_account_name:to==='cash'?'Caja efectivo':(toAcc?.name||''),
+   p_amount:amount,
+   p_reference:note
+  });
+  if(error)throw error;
+  $('cashTransferAmount').value='';
+  $('cashTransferNote').value='';
+  await loadCashData();
+  alert('Transferencia registrada.');
+ }catch(e){
+  alert('Error registrando transferencia: '+(e.message||e));
+ }
+}
+
+async function registerExpense(){
+ if(!canManageExpenses())return alert('Solo Supervisor o Administrador puede registrar gastos.');
+
+ const category=$('expenseCategory')?.value||'Otro';
+ const description=($('expenseDescription')?.value||'').trim();
+ const amount=Number($('expenseAmount')?.value||0);
+ const accountKey=$('expenseAccount')?.value||'cash';
+ const reference=($('expenseReference')?.value||'').trim();
+
+ if(!description)return alert('Ingresa el concepto del gasto.');
+ if(!(amount>0))return alert('Ingresa un importe válido.');
+
+ const acc=accountKey==='cash'?null:(db.accounts||[]).find(a=>String(a.id)===accountKey);
+
+ try{
+  const {error}=await supabaseClient.rpc('register_filium_expense',{
+   p_category:category,
+   p_description:description,
+   p_amount:amount,
+   p_account_id:accountKey==='cash'?null:Number(accountKey),
+   p_account_name:accountKey==='cash'?'Caja efectivo':(acc?.name||''),
+   p_reference:reference
+  });
+  if(error)throw error;
+
+  $('expenseDescription').value='';
+  $('expenseAmount').value='';
+  $('expenseReference').value='';
+  await loadCashData();
+  alert('Gasto registrado.');
+ }catch(e){
+  alert('Error registrando gasto: '+(e.message||e));
+ }
+}
+
 async function loadFromSupabase(){
  if(!currentUser)return;
  try{
@@ -707,7 +1168,25 @@ async function loadFromSupabase(){
    (itemsByOrder[i.order_id]??=[]).push({id:i.product_id,sku:i.sku,name:i.product_name,qty:Number(i.quantity||1),price:Number(i.unit_price||0)})
   }
   db.orders=(or.data||[]).map(r=>orderFromRow(r,itemsByOrder[r.id]||[]));
-  db.preorders=(rr.data||[]).map(r=>({id:r.id,type:r.type,client:r.customer_name||'',phone:r.phone||'',productId:r.product_id,product:r.product_name||'',qty:Number(r.quantity||1),listPrice:Number(r.list_price||0),total:Number(r.total||0),advance:Number(r.advance||0),balance:Number(r.balance||0),orderCode:r.order_code||'',orderId:r.order_id||null,status:r.status||'Activo',date:r.created_at}));
+  db.preorders=(rr.data||[]).map(r=>({
+ id:r.id,
+ type:r.type,
+ client:r.customer_name||'',
+ phone:r.phone||'',
+ productId:r.product_id,
+ product:r.items_summary||r.product_name||'',
+ qty:Number(r.quantity||1),
+ listPrice:Number(r.list_price||0),
+ total:Number(r.total||0),
+ advance:Number(r.advance||0),
+ balance:Number(r.balance||0),
+ orderCode:r.order_code||'',
+ orderId:r.order_id||null,
+ fulfillmentType:r.fulfillment_type||'recojo_tienda',
+ fulfillmentLabel:r.fulfillment_type==='delivery_lima'?'Delivery Lima':(r.fulfillment_type==='provincia'?'Provincia':'Recojo en tienda'),
+ status:r.status||'Activo',
+ date:r.created_at
+}));
   db.movements=(mr.data||[]);
   const years=db.orders.map(o=>parseInt((o.code||'').split('-').pop())).filter(Number.isFinite); db.seq=Math.max(100529,(years.length?Math.max(...years)+1:100529));
   setDbStatus(true,'conectado');
@@ -957,6 +1436,18 @@ async function createSale(){
      status:'Por alistar'
    };
    buildTicket(local);
+   if(received>0){
+    await registerCashPayment({
+      orderId:local.id,
+      orderCode:code,
+      amount:Math.min(received,total),
+      paymentMethod:orderPayload.payment_method,
+      accountId:orderPayload.payment_account_id,
+      accountName:orderPayload.payment_method==='Efectivo'?'Caja efectivo':(orderPayload.payment_account_name||''),
+      reference:orderPayload.payment_operation||'',
+      detail:'Cobro inicial de venta'
+    });
+   }
    cart=[];
    ['sClient','sDni','sPhone','sSearch','sReceived','sOperation','sDestination','sAddress'].forEach(x=>$(x).value='');
    $('sReceived').value=0;
@@ -993,6 +1484,7 @@ async function loadPaymentAccounts(){
   db.accounts=data||[];
   renderAccounts();
   populatePaymentAccountSelects();
+  populateCashAccountSelectors();
  }catch(e){
   console.error('Error cargando cuentas:',e);
  }
@@ -1306,46 +1798,203 @@ function buildTicket(o){
  <div class="ticket-center">¡Gracias por tu compra!</div>
  <div class="ticket-note ticket-center" style="margin-top:2mm">Guarde este ticket como constancia de su compra.</div>`;
 }
-function syncPreorderAmounts(){
- const p=db.products.find(x=>String(x.id)===String($('prProduct')?.value));
+
+function addReservationCartItem(){
+ const productId=Number($('prProduct')?.value||0);
+ const p=db.products.find(x=>Number(x.id)===productId);
  const qty=Math.max(1,Number($('prQty')?.value||1));
- const list=Number(p?.list||0);
- const total=list*qty;
- const advance=Math.max(0,Number($('prAdvance')?.value||0));
- const balance=Math.max(0,total-advance);
- if($('prListPrice'))$('prListPrice').value=money(list);
- if($('prTotal'))$('prTotal').value=money(total);
- if($('prBalance'))$('prBalance').value=money(balance);
+ const type=$('prType')?.value||'reserva';
+
+ if(!p)return alert('Selecciona un producto.');
+
+ const existing=reservationCart.find(x=>x.productId===p.id);
+ const nextQty=(existing?.qty||0)+qty;
+
+ if(type==='reserva' && nextQty>available(p)){
+   return alert('No hay stock disponible suficiente para reservar esa cantidad.');
+ }
+
+ if(existing){
+   existing.qty=nextQty;
+ }else{
+   reservationCart.push({
+     productId:p.id,
+     sku:p.sku,
+     name:p.name,
+     qty,
+     listPrice:Number(p.list||0),
+     salePrice:Number(p.list||0)
+   });
+ }
+ renderReservationCart();
 }
 
-async function createPreorder(){
- let type=$('prType').value;
- let p=db.products.find(x=>String(x.id)===String($('prProduct').value));
- let qty=Math.max(1,+$('prQty').value||1);
- if(!p)return alert('Selecciona un producto.');
- if(type==='reserva' && qty>available(p))return alert('No hay stock disponible suficiente para reservar.');
- const listPrice=Number(p.list||0);
- const total=listPrice*qty;
- const advance=Math.max(0,+$('prAdvance').value||0);
- if(advance>total)return alert('El adelanto no puede ser mayor al total.');
+function removeReservationCartItem(index){
+ reservationCart.splice(index,1);
+ renderReservationCart();
+}
+
+function updateReservationSalePrice(index,value){
+ const item=reservationCart[index];
+ if(!item)return;
+ item.salePrice=Math.max(0,Number(value||0));
+ renderReservationCart(false);
+}
+
+function updateReservationQty(index,value){
+ const item=reservationCart[index];
+ if(!item)return;
+ const qty=Math.max(1,Number(value||1));
+ const p=db.products.find(x=>x.id===item.productId);
+
+ if(($('prType')?.value||'reserva')==='reserva' && p && qty>available(p)){
+   alert('No hay stock suficiente para reservar esa cantidad.');
+   renderReservationCart();
+   return;
+ }
+
+ item.qty=qty;
+ renderReservationCart();
+}
+
+function reservationTotals(){
+ const listTotal=reservationCart.reduce((s,i)=>s+Number(i.listPrice||0)*Number(i.qty||0),0);
+ const saleTotal=reservationCart.reduce((s,i)=>s+Number(i.salePrice||0)*Number(i.qty||0),0);
+ const advance=Math.max(0,Number($('prAdvance')?.value||0));
+ return {listTotal,saleTotal,advance,balance:Math.max(0,saleTotal-advance)};
+}
+
+function renderReservationCart(rebuildRows=true){
+ const rows=$('reservationCartRows');
+
+ if(rows && rebuildRows){
+   rows.innerHTML=reservationCart.length
+     ? reservationCart.map((i,idx)=>`<tr>
+        <td><b>${i.name}</b><div class="small">${i.sku||''}</div></td>
+        <td><input style="width:72px" type="number" min="1" value="${i.qty}" onchange="updateReservationQty(${idx},this.value)"></td>
+        <td>${money(i.listPrice)}</td>
+        <td><input style="width:110px" type="number" min="0" step="0.01" value="${Number(i.salePrice||0).toFixed(2)}" onchange="updateReservationSalePrice(${idx},this.value)"></td>
+        <td><b>${money(Number(i.salePrice||0)*Number(i.qty||0))}</b></td>
+        <td><button class="trash-btn" type="button" onclick="removeReservationCartItem(${idx})" title="Quitar">🗑</button></td>
+       </tr>`).join('')
+     : '<tr><td colspan="6" class="small">Carrito vacío.</td></tr>';
+ }
+
+ const t=reservationTotals();
+ if($('prListTotal'))$('prListTotal').value=money(t.listTotal);
+ if($('prSaleTotal'))$('prSaleTotal').value=money(t.saleTotal);
+ if($('prBalance'))$('prBalance').value=money(t.balance);
+}
+
+function clearReservationCart(){
+ reservationCart=[];
+ if($('prAdvance'))$('prAdvance').value='0';
+ renderReservationCart();
+}
+
+function syncReservationAccountField(){
+ const method=$('prPaymentMethod')?.value||'Efectivo';
+ const show=method!=='Efectivo';
+ if($('prPaymentAccountWrap'))$('prPaymentAccountWrap').classList.toggle('hidden',!show);
+
+ const opts=(db.accounts||[]).map(a=>`<option value="${a.id}">${accountLabel(a)}</option>`).join('');
+ if($('prPaymentAccount'))$('prPaymentAccount').innerHTML=opts||'<option value="">Sin cuentas registradas</option>';
+}
+
+function syncReservationDeliveryFields(){
+ const mode=$('prFulfillment')?.value||'recojo_tienda';
+ const shipping=mode!=='recojo_tienda';
+ if($('prDestinationWrap'))$('prDestinationWrap').classList.toggle('hidden',!shipping);
+ if($('prAddressWrap'))$('prAddressWrap').classList.toggle('hidden',!shipping);
+ if($('prCarrierWrap'))$('prCarrierWrap').classList.toggle('hidden',!shipping);
+}
+
+async function createReservationFromCart(){
+ const type=$('prType')?.value||'reserva';
+ const client=($('prClient')?.value||'').trim();
+ const phone=($('prPhone')?.value||'').trim();
+ const totals=reservationTotals();
+
+ if(!reservationCart.length)return alert('Agrega al menos un producto al carrito.');
+ if(!client)return alert('Ingresa el nombre del cliente.');
+ if(totals.saleTotal<=0)return alert('El total acordado debe ser mayor a cero.');
+ if(totals.advance>totals.saleTotal)return alert('El abono no puede ser mayor al total acordado.');
+
+ const paymentMethod=$('prPaymentMethod')?.value||'Efectivo';
+ let paymentAccountId=null;
+ let paymentAccountName='';
+
+ if(paymentMethod!=='Efectivo'){
+   paymentAccountId=Number($('prPaymentAccount')?.value||0)||null;
+   const acc=(db.accounts||[]).find(a=>Number(a.id)===paymentAccountId);
+   if(!acc)return alert('Selecciona la cuenta donde ingresó el abono.');
+   paymentAccountName=acc.name||'';
+ }
+
+ const fulfillment=$('prFulfillment')?.value||'recojo_tienda';
+ const destination=fulfillment==='recojo_tienda'?'':($('prDestination')?.value||'').trim();
+ const address=fulfillment==='recojo_tienda'?'':($('prAddress')?.value||'').trim();
+ const carrier=fulfillment==='recojo_tienda'?'':($('prCarrier')?.value||'').trim();
+
+ if(fulfillment!=='recojo_tienda' && !destination)return alert('Ingresa el destino o distrito.');
+
+ const items=reservationCart.map(i=>({
+   product_id:i.productId,
+   quantity:i.qty,
+   unit_price:Number(i.salePrice||0)
+ }));
+
  try{
-   const {data,error}=await supabaseClient.rpc('create_filium_reservation',{
+   const {data,error}=await supabaseClient.rpc('create_filium_reservation_cart',{
      p_type:type,
-     p_customer_name:$('prClient').value||'Cliente',
-     p_phone:$('prPhone').value||'',
-     p_product_id:p.id,
-     p_quantity:qty,
-     p_advance:advance
+     p_customer_name:client,
+     p_phone:phone,
+     p_items:items,
+     p_advance:totals.advance,
+     p_payment_method:paymentMethod,
+     p_payment_operation:($('prPaymentOperation')?.value||'').trim(),
+     p_payment_account_id:paymentAccountId,
+     p_payment_account_name:paymentAccountName,
+     p_fulfillment_type:fulfillment,
+     p_destination:destination,
+     p_address:address,
+     p_carrier:carrier
    });
+
    if(error)throw error;
    const result=Array.isArray(data)?data[0]:data;
-   await loadFromSupabase();
-   alert((type==='reserva'?'Reserva':'Preventa')+' registrada.\nPedido: '+(result?.order_code||'-')+'\nTotal: '+money(total)+'\nAdelanto: '+money(advance)+'\nSaldo: '+money(Math.max(0,total-advance)));
+
+   if(totals.advance>0){
+    await registerCashPayment({
+      orderId:result?.order_id||null,
+      orderCode:result?.order_code||'',
+      amount:totals.advance,
+      paymentMethod:paymentMethod,
+      accountId:paymentAccountId,
+      accountName:paymentMethod==='Efectivo'?'Caja efectivo':paymentAccountName,
+      reference:($('prPaymentOperation')?.value||'').trim(),
+      detail:(type==='reserva'?'Abono de reserva':'Abono de preventa')
+    });
+   }
+
+   alert(
+    (type==='reserva'?'Reserva':'Preventa')+' generada.\n'+
+    'Pedido: '+(result?.order_code||'-')+'\n'+
+    'Total: '+money(totals.saleTotal)+'\n'+
+    'Abono: '+money(totals.advance)+'\n'+
+    'Saldo: '+money(totals.balance)
+   );
+
+   reservationCart=[];
    $('prClient').value='';
    $('prPhone').value='';
-   $('prQty').value='1';
    $('prAdvance').value='0';
-   syncPreorderAmounts();
+   $('prPaymentOperation').value='';
+
+   await loadFromSupabase();
+   await loadCashData();
+   renderReservationCart();
+
  }catch(e){
    console.error(e);
    alert('Error registrando '+type+': '+(e.message||e));
@@ -1353,19 +2002,20 @@ async function createPreorder(){
 }
 
 function renderPreorders(){
- $('preRows').innerHTML=db.preorders.length?db.preorders.map(r=>`<tr>
-  <td><b>${r.orderCode||'-'}</b></td>
-  <td><span class="badge ${r.type==='reserva'?'ok':'warn'}">${r.type}</span></td>
-  <td>${r.client}<div class="small">${r.phone||''}</div></td>
-  <td>${r.product}</td>
-  <td>${r.qty}</td>
-  <td>${money(r.listPrice)}</td>
-  <td><b>${money(r.total)}</b></td>
-  <td>${money(r.advance)}</td>
-  <td><b>${money(r.balance)}</b></td>
-  <td>${r.status}</td>
-  <td>${new Date(r.date).toLocaleDateString('es-PE')}</td>
- </tr>`).join(''):'<tr><td colspan="11" class="small">No hay reservas o preventas registradas.</td></tr>';
+ $('preRows').innerHTML=db.preorders.length
+  ? db.preorders.map(r=>`<tr>
+     <td><b>${r.orderCode||'-'}</b></td>
+     <td><span class="badge ${r.type==='reserva'?'ok':'warn'}">${r.type}</span></td>
+     <td>${r.client}<div class="small">${r.phone||''}</div></td>
+     <td>${r.product||'-'}</td>
+     <td><b>${money(r.total)}</b></td>
+     <td>${money(r.advance)}</td>
+     <td><b>${money(r.balance)}</b></td>
+     <td>${r.fulfillmentLabel||'-'}</td>
+     <td>${r.status}</td>
+     <td>${new Date(r.date).toLocaleDateString('es-PE')}</td>
+    </tr>`).join('')
+  : '<tr><td colspan="10" class="small">No hay reservas o preventas registradas.</td></tr>';
 }
 
 function fulfillLabel(o){return o.fulfill==='recojo_tienda'?'Recojo en tienda':o.fulfill==='delivery_lima'?'Delivery Lima':'Provincia'}
@@ -1535,8 +2185,19 @@ async function collectBalance(id){
    p_payment_account_name:accountName
   });
   if(error)throw error;
+  await registerCashPayment({
+   orderId:id,
+   orderCode:o.code,
+   amount:paid,
+   paymentMethod:method,
+   accountId:accountId,
+   accountName:method.toLowerCase()==='efectivo'?'Caja efectivo':accountName,
+   reference:'',
+   detail:'Cobro de saldo pendiente'
+  });
   buildTicket(o);
   await loadFromSupabase();
+  await loadCashData();
  }catch(e){
   alert('Error cobrando saldo: '+(e.message||e));
  }
@@ -1957,9 +2618,27 @@ function printLabel(){
  },3000);
 }
 function resetDemo(){location.reload()}
-function renderAll(){renderInventory();renderReceiptProducts();renderMovements();renderPreorders();renderOrders();renderLogistics();renderCart();syncPreorderAmounts();$('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</option>`).join('');$('kProducts').textContent=db.products.length;$('kOrders').textContent=db.orders.length;$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0)}
+function renderAll(){
+ renderInventory();
+ renderReceiptProducts();
+ renderMovements();
+ renderPreorders();
+ renderOrders();
+ renderLogistics();
+ renderCart();
+ renderReservationCart();
+ $('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</option>`).join('');
+ syncReservationAccountField();
+ syncReservationDeliveryFields();
+ $('kProducts').textContent=db.products.length;
+ $('kOrders').textContent=db.orders.length;
+ $('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);
+ $('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0);
+ renderCashFinance();
+}
+
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
-syncDeliveryFields();renderCart();syncPaymentAccountField();initAuth();
+syncDeliveryFields();renderCart();syncPaymentAccountField();renderReservationCart();syncReservationAccountField();syncReservationDeliveryFields();initAuth();
 $('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 </script>
 </body>
