@@ -181,6 +181,47 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   .filium-log-actions{justify-content:flex-start}
 }
 
+
+/* FILIUM v5.0 · secciones logísticas compactas */
+.filium-log-compact{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#fff;
+  margin-bottom:9px;
+}
+.filium-log-compact-main{
+  min-width:0;
+  font-size:12px;
+  line-height:1.35;
+}
+.filium-log-compact-title{
+  font-weight:800;
+  font-size:12px;
+}
+.filium-log-compact-text{
+  color:var(--muted);
+  margin-top:2px;
+}
+.filium-log-compact-actions{
+  display:flex;
+  gap:7px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.filium-ticket-compact{
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#fff;
+  padding:10px;
+}
+.filium-ticket-compact .small{margin-bottom:8px}
+
 @media(max-width:800px){.grid,.grid3,.kpis{grid-template-columns:1fr}main{padding:10px}table{min-width:850px}}
 
 .ticket{width:58mm;background:#fff;color:#000;padding:1.2mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.28}
@@ -553,7 +594,7 @@ const SUPABASE_KEY="sb_publishable_xvns4feM-ur9AsnrIGrqVw_rgjFrSyk";
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const LS='filium_lite_v2';
 let db={products:[],orders:[],preorders:[],movements:[],accounts:[],seq:1};
-let cart=[],editingId=null,expandedLogOrderId=null,currentShipLabelOrderId=null;
+let cart=[],editingId=null,expandedLogOrderId=null,currentShipLabelOrderId=null,logEditOrderId=null,logEditSection=null;
 let currentUser=null;
 let currentProfile=null;
 const ROLE_LABELS={tienda:'Tienda',supervisor:'Supervisor',administrador:'Administrador'};
@@ -1371,6 +1412,7 @@ async function saveShippingData(id){
    p_pickup_key:pickupKey
   });
   if(error)throw error;
+  logEditOrderId=null; logEditSection=null;
   await loadFromSupabase();
   const updated=db.orders.find(x=>x.id===id);
   if(updated?.tracking && updated?.pickupKey && updated?.status==='En tránsito'){
@@ -1414,6 +1456,7 @@ async function markPreparationReady(id){
   });
   if(error)throw error;
 
+  logEditOrderId=null; logEditSection=null;
   await loadFromSupabase();
 
   const updated=db.orders.find(x=>x.id===id);
@@ -1499,14 +1542,42 @@ async function collectBalance(id){
  }
 }
 
+
+function isEditingLogSection(id,section){
+  return logEditOrderId===id && logEditSection===section;
+}
+function editLogSection(id,section){
+  logEditOrderId=id;
+  logEditSection=section;
+  expandedLogOrderId=id;
+  renderLogistics();
+  requestAnimationFrame(()=>{
+    const el=document.getElementById('logOrder_'+id);
+    if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});
+  });
+}
+function closeLogSectionEdit(){
+  logEditOrderId=null;
+  logEditSection=null;
+  renderLogistics();
+}
+
 function toggleLogOrder(id){
-  expandedLogOrderId = (expandedLogOrderId === id) ? null : id;
+  if(expandedLogOrderId===id){
+    expandedLogOrderId=null;
+    logEditOrderId=null;
+    logEditSection=null;
+  }else{
+    expandedLogOrderId=id;
+    logEditOrderId=null;
+    logEditSection=null;
+  }
   renderLogistics();
 
-  if(expandedLogOrderId === id){
+  if(expandedLogOrderId===id){
     requestAnimationFrame(()=>{
       const card=document.getElementById('logOrder_'+id);
-      if(card) card.scrollIntoView({behavior:'smooth',block:'nearest'});
+      if(card)card.scrollIntoView({behavior:'smooth',block:'nearest'});
     });
   }
 }
@@ -1519,14 +1590,7 @@ function renderLogistics(){
     .map(normalizeOrder)
     .filter(o=>{
       const text=[
-        o.code,
-        o.client,
-        o.phone,
-        o.destination,
-        o.address,
-        o.carrier,
-        o.tracking,
-        o.pickupKey
+        o.code,o.client,o.phone,o.destination,o.address,o.carrier,o.tracking,o.pickupKey
       ].filter(Boolean).join(' ').toLowerCase();
 
       return (!filterStatus || o.status===filterStatus)
@@ -1537,7 +1601,7 @@ function renderLogistics(){
     .reverse();
 
   const root=$('logisticsList');
-  if(!root) return;
+  if(!root)return;
 
   root.classList.add('filium-log-list');
 
@@ -1549,6 +1613,15 @@ function renderLogistics(){
   root.innerHTML=orders.map(o=>{
     const isPickup=o.fulfill==='recojo_tienda';
     const expanded=expandedLogOrderId===o.id;
+    const isShalom=String(o.carrier||'').toLowerCase().includes('shalom');
+
+    const dataDone=isPickup || !!(o.destination && o.address && o.carrier);
+    const prepDone=isPickup || !!o.prepReady;
+    const dispatchDone=isPickup || !!(o.tracking && o.pickupKey);
+
+    const editingData=isEditingLogSection(o.id,'data');
+    const editingPrep=isEditingLogSection(o.id,'prep');
+    const editingDispatch=isEditingLogSection(o.id,'dispatch');
 
     const prepBadge=o.prepReady
       ? '<span class="badge ok">Preparación lista</span>'
@@ -1576,7 +1649,6 @@ function renderLogistics(){
           </div>
           ${summaryTracking}
         </div>
-
         <div class="filium-log-actions">
           ${prepBadge}
           <span class="badge info">${o.status}</span>
@@ -1591,202 +1663,226 @@ function renderLogistics(){
       return `<div class="filium-log-card" id="logOrder_${o.id}">${summary}</div>`;
     }
 
+    // 1. Datos coordinados
+    const dataSection = dataDone && !editingData
+      ? `<div class="filium-log-compact">
+           <div class="filium-log-compact-main">
+             <div class="filium-log-compact-title">Datos coordinados ✓</div>
+             <div class="filium-log-compact-text">
+               ${isPickup?'Recojo en tienda':`${o.carrier||'-'} · ${o.destination||'-'}`}
+             </div>
+           </div>
+           <div class="filium-log-compact-actions">
+             ${isPickup?'':`<button type="button" class="btn secondary" onclick="editLogSection(${o.id},'data')">Editar</button>`}
+           </div>
+         </div>`
+      : `<section class="filium-log-section">
+           <h4>1. Datos coordinados</h4>
+           <div class="grid3">
+             <div><label>Cliente</label><input value="${o.client||''}" readonly></div>
+             <div><label>DNI / RUC</label><input value="${o.dni||''}" readonly></div>
+             <div><label>Celular</label><input value="${o.phone||''}" readonly></div>
+             ${isPickup?'':`
+             <div><label>Destino</label><input id="shipDest_${o.id}" value="${o.destination||''}"></div>
+             <div><label>Dirección / Agencia</label><input id="shipAddr_${o.id}" value="${o.address||''}"></div>
+             <div><label>Operador</label><input id="shipCarrier_${o.id}" value="${o.carrier||''}"></div>`}
+           </div>
+           ${isPickup?'':`
+           <div class="actions" style="margin-top:10px">
+             <button type="button" class="btn" onclick="saveShippingData(${o.id})">Guardar datos</button>
+             ${editingData?`<button type="button" class="btn secondary" onclick="closeLogSectionEdit()">Cancelar</button>`:''}
+           </div>`}
+         </section>`;
+
+    // 2. Preparación
+    const prepSection = isPickup ? '' : (
+      prepDone && !editingPrep
+      ? `<div class="filium-log-compact">
+           <div class="filium-log-compact-main">
+             <div class="filium-log-compact-title">Preparación lista ✓</div>
+             <div class="filium-log-compact-text">
+               ${o.packages||1} bulto(s)${o.weight?` · ${o.weight}`:''}${o.dimensions?` · ${o.dimensions}`:''}
+             </div>
+           </div>
+           <div class="filium-log-compact-actions">
+             <button type="button" class="btn secondary" onclick="editLogSection(${o.id},'prep')">Editar</button>
+           </div>
+         </div>`
+      : `<section class="filium-log-section">
+           <h4>2. Preparación</h4>
+           <div class="grid3">
+             <div>
+               <label>Tipo de empaque</label>
+               <select onchange="updateOrderField(${o.id},'packageType',this.value)">
+                 <option ${o.packageType==='Caja'?'selected':''}>Caja</option>
+                 <option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option>
+                 <option ${o.packageType==='Sobre'?'selected':''}>Sobre</option>
+                 <option ${o.packageType==='Otro'?'selected':''}>Otro</option>
+               </select>
+             </div>
+             <div><label>N.º bultos</label><input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)"></div>
+             <div><label>Peso</label><input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)"></div>
+             <div><label>Dimensiones</label><input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)"></div>
+           </div>
+           <div class="actions" style="margin-top:10px">
+             <button type="button" class="btn" onclick="markPreparationReady(${o.id})">
+               ${o.prepReady?'Guardar cambios':'Marcar listo'}
+             </button>
+             ${editingPrep?`<button type="button" class="btn secondary" onclick="closeLogSectionEdit()">Cancelar</button>`:''}
+           </div>
+         </section>`
+    );
+
+    // 3. Despacho
+    const dispatchSection = isPickup ? '' : (
+      dispatchDone && !editingDispatch
+      ? `<div class="filium-log-compact">
+           <div class="filium-log-compact-main">
+             <div class="filium-log-compact-title">Despacho guardado ✓</div>
+             <div class="filium-log-compact-text">
+               Tracking ${o.tracking||'-'} · Clave ${o.pickupKey||'-'}
+             </div>
+           </div>
+           <div class="filium-log-compact-actions">
+             <button type="button" class="btn secondary" onclick="editLogSection(${o.id},'dispatch')">Editar</button>
+             ${isShalom && ['En tránsito','En destino'].includes(o.status)
+               ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Revisar estado en Shalom</button>`
+               : ''}
+           </div>
+         </div>`
+      : `<section class="filium-log-section">
+           <h4>3. Despacho</h4>
+           <div class="grid3">
+             <div><label>N.º guía / Tracking</label><input id="shipTracking_${o.id}" value="${o.tracking||''}"></div>
+             <div><label>Clave de recojo</label><input id="shipPickup_${o.id}" value="${o.pickupKey||''}"></div>
+             <div><label>Costo de envío</label><input type="number" step="0.01" value="${o.shippingCost||0}" onchange="updateOrderField(${o.id},'shippingCost',this.value)"></div>
+             <div>
+               <label>Quién paga</label>
+               <select onchange="updateOrderField(${o.id},'shippingPaidBy',this.value)">
+                 <option ${o.shippingPaidBy==='Cliente'?'selected':''}>Cliente</option>
+                 <option ${o.shippingPaidBy==='FILIUM'?'selected':''}>FILIUM</option>
+               </select>
+             </div>
+             <div>
+               <label>Estado pago flete</label>
+               <select onchange="updateOrderField(${o.id},'shippingPaymentStatus',this.value)">
+                 <option ${o.shippingPaymentStatus==='Pendiente'?'selected':''}>Pendiente</option>
+                 <option ${o.shippingPaymentStatus==='Pagado'?'selected':''}>Pagado</option>
+               </select>
+             </div>
+             <div>
+               <label>Método pago flete</label>
+               <select onchange="updateOrderField(${o.id},'shippingPaymentMethod',this.value)">
+                 <option value="">Seleccionar</option>
+                 <option ${o.shippingPaymentMethod==='Efectivo'?'selected':''}>Efectivo</option>
+                 <option ${o.shippingPaymentMethod==='Yape'?'selected':''}>Yape</option>
+                 <option ${o.shippingPaymentMethod==='Plin'?'selected':''}>Plin</option>
+                 <option ${o.shippingPaymentMethod==='Transferencia'?'selected':''}>Transferencia</option>
+               </select>
+             </div>
+           </div>
+           <div class="actions" style="margin-top:10px">
+             <button type="button" class="btn" onclick="saveShippingData(${o.id})">Guardar despacho</button>
+             <button type="button" class="btn secondary" onclick="processShippingPayment(${o.id})">Procesar pago de envío</button>
+             ${isShalom && ['En tránsito','En destino'].includes(o.status)
+               ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Revisar estado en Shalom</button>`
+               : ''}
+             ${editingDispatch?`<button type="button" class="btn secondary" onclick="closeLogSectionEdit()">Cancelar</button>`:''}
+           </div>
+         </section>`
+    );
+
+    // 4. Seguimiento: compacto si ya está en tránsito/destino/entregado
+    const trackingDone=['En tránsito','En destino','Entregado'].includes(o.status);
+    const trackingSection = trackingDone
+      ? `<div class="filium-log-compact">
+           <div class="filium-log-compact-main">
+             <div class="filium-log-compact-title">Seguimiento · ${o.status}</div>
+             <div class="filium-log-compact-text">
+               ${Number(o.balance||0)>0?`Saldo ${money(o.balance)}`:'Compra pagada'}
+             </div>
+           </div>
+           <div class="filium-log-compact-actions">
+             ${Number(o.balance||0)>0
+               ? `<button type="button" class="btn" onclick="collectBalance(${o.id})">Cobrar saldo</button>`
+               : ''}
+             ${isShalom && ['En tránsito','En destino'].includes(o.status)
+               ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Revisar estado en Shalom</button>`
+               : ''}
+             ${o.status!=='Entregado'
+               ? `<select onchange="setLogStatus(${o.id},this.value)">
+                    <option ${o.status==='En tránsito'?'selected':''}>En tránsito</option>
+                    <option ${o.status==='En destino'?'selected':''}>En destino</option>
+                    <option ${o.status==='Entregado'?'selected':''}>Entregado</option>
+                  </select>`
+               : ''}
+           </div>
+         </div>`
+      : `<section class="filium-log-section">
+           <h4>${isPickup?'2':'4'}. Seguimiento</h4>
+           <div class="grid3">
+             <div>
+               <label>Estado logístico</label>
+               <select onchange="setLogStatus(${o.id},this.value)">
+                 <option ${o.status==='Por alistar'?'selected':''}>Por alistar</option>
+                 <option ${o.status==='En tránsito'?'selected':''}>En tránsito</option>
+                 <option ${o.status==='En destino'?'selected':''}>En destino</option>
+                 <option ${o.status==='Entregado'?'selected':''}>Entregado</option>
+               </select>
+             </div>
+             <div>
+               <label>Pago de compra</label>
+               <div style="padding-top:8px">
+                 ${Number(o.balance||0)>0
+                   ? `<button type="button" class="btn" onclick="collectBalance(${o.id})">Cobrar saldo ${money(o.balance)}</button>`
+                   : '<span class="badge ok">Compra pagada</span>'}
+               </div>
+             </div>
+           </div>
+         </section>`;
+
+    // Ticket:
+    // Preview only while editing logistics data and before/while marking ready.
+    const showPreview = !isPickup && (!o.prepReady || editingData || editingPrep || editingDispatch);
+
+    const ticketAside = isPickup ? '' : (
+      showPreview
+      ? `<aside class="filium-log-ticket">
+           <section class="filium-log-section">
+             <h4>Previsualización ticket</h4>
+             <div id="shipLabelInline_${o.id}" class="ship-label">
+               <div class="destination">${o.destination||'DESTINO'}</div>
+               <div class="order-code">${o.code}</div>
+               <div class="small">Vista previa mientras editas los datos de envío.</div>
+             </div>
+           </section>
+         </aside>`
+      : `<aside class="filium-log-ticket">
+           <div class="filium-ticket-compact">
+             <div class="small"><b>Ticket listo</b> · ${o.code}</div>
+             <div class="actions">
+               <button type="button" class="btn" onclick="loadShipLabel(${o.id});setTimeout(printLabel,80)">
+                 Imprimir ticket
+               </button>
+               ${isShalom && ['En tránsito','En destino'].includes(o.status)
+                 ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Revisar estado en Shalom</button>`
+                 : ''}
+             </div>
+           </div>
+         </aside>`
+    );
+
     const main=`
       <div class="filium-log-main">
-
-        <section class="filium-log-section">
-          <h4>1. Datos coordinados</h4>
-          <div class="grid3">
-            <div><label>Cliente</label><input value="${o.client||''}" readonly></div>
-            <div><label>DNI / RUC</label><input value="${o.dni||''}" readonly></div>
-            <div><label>Celular</label><input value="${o.phone||''}" readonly></div>
-
-            ${isPickup?'':`
-            <div><label>Destino</label><input id="shipDest_${o.id}" value="${o.destination||''}"></div>
-            <div><label>Dirección / Agencia</label><input id="shipAddr_${o.id}" value="${o.address||''}"></div>
-            <div><label>Operador</label><input id="shipCarrier_${o.id}" value="${o.carrier||''}"></div>`}
-          </div>
-
-          ${isPickup?'':`
-          <div class="actions" style="margin-top:10px">
-            <button type="button" class="btn secondary" onclick="saveShippingData(${o.id})">
-              Guardar datos de envío
-            </button>
-          </div>`}
-        </section>
-
-        ${isPickup?'':`
-        <section class="filium-log-section">
-          <h4>2. Preparación</h4>
-          <div class="grid3">
-            <div>
-              <label>Tipo de empaque</label>
-              <select onchange="updateOrderField(${o.id},'packageType',this.value)">
-                <option ${o.packageType==='Caja'?'selected':''}>Caja</option>
-                <option ${o.packageType==='Bolsa'?'selected':''}>Bolsa</option>
-                <option ${o.packageType==='Sobre'?'selected':''}>Sobre</option>
-                <option ${o.packageType==='Otro'?'selected':''}>Otro</option>
-              </select>
-            </div>
-
-            <div>
-              <label>N.º bultos</label>
-              <input type="number" min="1" value="${o.packages||1}" onchange="updateOrderField(${o.id},'packages',this.value)">
-            </div>
-
-            <div>
-              <label>Peso</label>
-              <input value="${o.weight||''}" placeholder="Ej. 2.5 kg" onchange="updateOrderField(${o.id},'weight',this.value)">
-            </div>
-
-            <div>
-              <label>Dimensiones</label>
-              <input value="${o.dimensions||''}" placeholder="Ej. 30×25×20 cm" onchange="updateOrderField(${o.id},'dimensions',this.value)">
-            </div>
-
-            <div>
-              <label>Preparación</label>
-              <button type="button" class="btn ${o.prepReady?'secondary':''}"
-                onclick="${o.prepReady?`loadShipLabel(${o.id})`:`markPreparationReady(${o.id})`}">
-                ${o.prepReady?'✓ Listo · Ver ticket':'Marcar listo'}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section class="filium-log-section">
-          <h4>3. Despacho</h4>
-          <div class="grid3">
-            <div>
-              <label>N.º guía / Tracking</label>
-              <input id="shipTracking_${o.id}" value="${o.tracking||''}">
-            </div>
-
-            <div>
-              <label>Clave de recojo</label>
-              <input id="shipPickup_${o.id}" value="${o.pickupKey||''}">
-            </div>
-
-            <div>
-              <label>Costo de envío</label>
-              <input type="number" step="0.01" value="${o.shippingCost||0}"
-                onchange="updateOrderField(${o.id},'shippingCost',this.value)">
-            </div>
-
-            <div>
-              <label>Quién paga</label>
-              <select onchange="updateOrderField(${o.id},'shippingPaidBy',this.value)">
-                <option ${o.shippingPaidBy==='Cliente'?'selected':''}>Cliente</option>
-                <option ${o.shippingPaidBy==='FILIUM'?'selected':''}>FILIUM</option>
-              </select>
-            </div>
-
-            <div>
-              <label>Estado pago flete</label>
-              <select onchange="updateOrderField(${o.id},'shippingPaymentStatus',this.value)">
-                <option ${o.shippingPaymentStatus==='Pendiente'?'selected':''}>Pendiente</option>
-                <option ${o.shippingPaymentStatus==='Pagado'?'selected':''}>Pagado</option>
-              </select>
-            </div>
-
-            <div>
-              <label>Método pago flete</label>
-              <select onchange="updateOrderField(${o.id},'shippingPaymentMethod',this.value)">
-                <option value="">Seleccionar</option>
-                <option ${o.shippingPaymentMethod==='Efectivo'?'selected':''}>Efectivo</option>
-                <option ${o.shippingPaymentMethod==='Yape'?'selected':''}>Yape</option>
-                <option ${o.shippingPaymentMethod==='Plin'?'selected':''}>Plin</option>
-                <option ${o.shippingPaymentMethod==='Transferencia'?'selected':''}>Transferencia</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="actions" style="margin-top:10px">
-            <button type="button" class="btn secondary" onclick="saveShippingData(${o.id})">
-              Guardar despacho
-            </button>
-
-            <button type="button" class="btn secondary" onclick="processShippingPayment(${o.id})">
-              Procesar pago de envío
-            </button>
-
-            ${String(o.carrier||'').toLowerCase().includes('shalom')
-              ? `<button type="button" class="btn secondary" onclick="openShalomTracking()">Consultar en Shalom</button>`
-              : ''}
-          </div>
-        </section>`}
-
-        <section class="filium-log-section">
-          <h4>${isPickup?'2':'4'}. Seguimiento</h4>
-          <div class="grid3">
-            <div>
-              <label>Estado logístico</label>
-              <select onchange="setLogStatus(${o.id},this.value)">
-                <option ${o.status==='Por alistar'?'selected':''}>Por alistar</option>
-                <option ${o.status==='En tránsito'?'selected':''}>En tránsito</option>
-                <option ${o.status==='En destino'?'selected':''}>En destino</option>
-                <option ${o.status==='Entregado'?'selected':''}>Entregado</option>
-              </select>
-            </div>
-
-            <div>
-              <label>Pago de compra</label>
-              <div style="padding-top:8px">
-                ${Number(o.balance||0)>0
-                  ? `<button type="button" class="btn" onclick="collectBalance(${o.id})">Cobrar saldo ${money(o.balance)}</button>`
-                  : '<span class="badge ok">Compra pagada</span>'}
-              </div>
-            </div>
-
-            <div>
-              <label>Entrega</label>
-              <div style="padding-top:8px">
-                ${o.deliveredAt
-                  ? `<span class="badge ok">Entregado ${new Date(o.deliveredAt).toLocaleString('es-PE')}</span>`
-                  : '<span class="small">Pendiente</span>'}
-              </div>
-            </div>
-          </div>
-        </section>
+        ${dataSection}
+        ${prepSection}
+        ${dispatchSection}
+        ${trackingSection}
 
         <div class="filium-log-close">
-          <button type="button" class="btn secondary" onclick="toggleLogOrder(${o.id})">
-            Cerrar detalle
-          </button>
+          <button type="button" class="btn secondary" onclick="toggleLogOrder(${o.id})">Cerrar detalle</button>
         </div>
-
       </div>`;
-
-    const ticket=isPickup?'':`
-      <aside class="filium-log-ticket">
-        <section class="filium-log-section">
-          <h4>Ticket de envío</h4>
-
-          <div id="shipLabelInline_${o.id}" class="ship-label">
-            <div class="destination">${o.destination||'DESTINO'}</div>
-            <div class="order-code">${o.code}</div>
-            <div class="small">
-              ${o.prepReady
-                ? 'Pulsa “Generar / actualizar” para refrescar este ticket.'
-                : 'Marca el pedido como listo para generar el ticket.'}
-            </div>
-          </div>
-
-          <div class="actions" style="margin-top:10px">
-            <button type="button" class="btn secondary"
-              onclick="loadShipLabel(${o.id})"
-              ${o.prepReady?'':'disabled'}>
-              ${o.prepReady?'Generar / actualizar':'Disponible al marcar listo'}
-            </button>
-
-            <button type="button" class="btn secondary"
-              onclick="loadShipLabel(${o.id});setTimeout(printLabel,80)"
-              ${o.prepReady?'':'disabled'}>
-              Imprimir 62 mm
-            </button>
-          </div>
-        </section>
-      </aside>`;
 
     return `
       <div class="filium-log-card" id="logOrder_${o.id}">
@@ -1794,7 +1890,7 @@ function renderLogistics(){
         <div class="filium-log-detail">
           <div class="filium-log-layout">
             ${main}
-            ${ticket}
+            ${ticketAside}
           </div>
         </div>
       </div>`;
