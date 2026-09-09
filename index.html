@@ -1011,9 +1011,9 @@ async function loadProfile(user){
 }
 function applyPermissions(){
  const role=currentProfile?.role||'';
- $('roleBadge').textContent=ROLE_LABELS[role]||'Sin perfil';
- $('roleBadge').className='badge role-'+role;
- $('userName').textContent=actorName();
+ if($('roleBadge'))$('roleBadge').textContent=ROLE_LABELS[role]||'Sin perfil';
+ if($('roleBadge'))$('roleBadge').className='badge role-'+role;
+ if($('userName'))$('userName').textContent=actorName();
  const manage=canManageInventory();
  $('newProductBtn').classList.toggle('hidden',!manage);
  if(!manage)$('productForm').classList.add('hidden');
@@ -1328,7 +1328,7 @@ async function loadFromSupabase(){
   setDbStatus(true,'conectado');
   renderAll();
  }catch(e){
-  console.error(e);setDbStatus(false,'ERROR');alert('No se pudo conectar a Supabase: '+(e.message||e));
+  console.error(e);setDbStatus(false,'ERROR');alert('Error al cargar FILIUM: '+(e.message||e));
  }
 }
 async function save(){renderAll()}
@@ -3064,10 +3064,10 @@ function renderAll(){
  $('prProduct').innerHTML=db.products.map(p=>`<option value="${p.id}">${p.sku} · ${p.name} · ${money(p.list)} · Disp. ${available(p)}</option>`).join('');
  syncReservationAccountField();
  syncReservationDeliveryFields();
- $('kProducts').textContent=db.products.length;
- $('kOrders').textContent=db.orders.length;
- $('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);
- $('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0);
+ if($('kProducts'))$('kProducts').textContent=db.products.length;
+ if($('kOrders'))$('kOrders').textContent=db.orders.length;
+ if($('kReserved'))$('kReserved').textContent=db.products.reduce((a,p)=>a+p.reserved,0);
+ if($('kPreorder'))$('kPreorder').textContent=db.products.reduce((a,p)=>a+p.preorder,0);
  renderCashFinance();
  renderHeaderIndicators();
 }
