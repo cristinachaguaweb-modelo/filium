@@ -18,6 +18,36 @@ header h1{margin:0;font-size:20px}.small{font-size:12px;color:var(--muted)}heade
 .header-kpi{min-width:102px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);color:#fff}
 .header-kpi-label{font-size:9px;text-transform:uppercase;letter-spacing:.03em;opacity:.78;line-height:1.15}
 .header-kpi-value{font-size:14px;font-weight:800;margin-top:3px;white-space:nowrap}
+
+/* FILIUM v6.4 · usuario/sesión más compacto */
+.userbox{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  flex-wrap:wrap;
+  margin-left:auto;
+}
+.userbox .badge{
+  padding:3px 7px!important;
+  font-size:10px!important;
+  line-height:1.1!important;
+  border-radius:7px!important;
+}
+.userbox .small{
+  font-size:10px!important;
+  line-height:1.1!important;
+}
+.userbox .btn{
+  padding:6px 9px!important;
+  font-size:10px!important;
+  line-height:1.1!important;
+  border-radius:7px!important;
+}
+header{
+  padding:10px 14px!important;
+  min-height:auto!important;
+}
+
 @media(max-width:1050px){.header-main{align-items:flex-start;flex-direction:column}.header-kpis{width:100%}}
 
 nav{display:flex;gap:8px;overflow:auto;padding:12px 16px;background:#fff;border-bottom:1px solid var(--line)}
@@ -496,7 +526,7 @@ th{background:#f3f4f6;color:#374151}.tablewrap{overflow:auto}.hidden{display:non
   <span class="badge info">CAJA 01</span>
   <span id="roleBadge" class="badge">Sin perfil</span>
   <span id="userName" class="small" style="color:#fff"></span>
-  <button class="btn secondary" onclick="logout()">Cerrar sesión</button>
+  <button class="btn secondary" onclick="logout()">Salir</button>
  </div>
 </header>
 
