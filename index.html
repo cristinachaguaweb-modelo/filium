@@ -1442,6 +1442,38 @@ function renderMovements(){
  </tr>`).join(''):'<tr><td colspan="11" class="small">No hay movimientos registrados.</td></tr>';
 }
 
+
+async function addInventoryUnits(id){
+ if(!canManageInventory())return alert('Solo Supervisor o Administrador puede agregar unidades.');
+
+ const p=db.products.find(x=>x.id===id);
+ if(!p)return alert('Producto no encontrado.');
+
+ const qtyRaw=prompt('¿Cuántas unidades deseas agregar a '+p.name+'?','1');
+ if(qtyRaw===null)return;
+ const qty=Math.floor(Number(qtyRaw));
+ if(!Number.isFinite(qty) || qty<=0)return alert('Ingresa una cantidad válida mayor a cero.');
+
+ const reference=(prompt('Referencia / documento (opcional)','')||'').trim();
+ const detail=(prompt('Observación (opcional)','Ingreso manual de unidades')||'').trim();
+
+ try{
+  const {error}=await supabaseClient.rpc('add_filium_inventory_units',{
+   p_product_id:id,
+   p_quantity:qty,
+   p_reference:reference,
+   p_detail:detail
+  });
+  if(error)throw error;
+
+  await loadFromSupabase();
+  alert('Se agregaron '+qty+' unidad(es) a '+p.name+'.');
+ }catch(e){
+  console.error(e);
+  alert('Error agregando unidades: '+(e.message||e));
+ }
+}
+
 function renderInventory(){
  let q=($('stockSearch').value||'').toLowerCase();
  $('inventoryRows').innerHTML=db.products.filter(p=>(p.sku+' '+p.name).toLowerCase().includes(q)).map(p=>{
@@ -1458,7 +1490,7 @@ function renderInventory(){
    <td>${p.reserved}</td>
    <td>${p.preorder}</td>
    <td>${p.transit}</td>
-   <td>${canManageInventory()?`<button class="btn secondary" onclick="editProduct(${p.id})">${editingId===p.id?'Cerrar':'Editar'}</button>`:'<span class="small">Solo lectura</span>'}</td>
+   <td>${canManageInventory()?`<div class="actions"><button class="btn" onclick="addInventoryUnits(${p.id})">+ Unidades</button><button class="btn secondary" onclick="editProduct(${p.id})">${editingId===p.id?'Cerrar':'Editar'}</button></div>`:'<span class="small">Solo lectura</span>'}</td>
   </tr>`;
   if(editingId!==p.id)return row;
   return row+`<tr class="inventory-edit-row"><td colspan="13">
